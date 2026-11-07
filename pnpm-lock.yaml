@@ -23,6 +23,9 @@ importers:
       '@sentry/node':
         specifier: ^10.53.1
         version: 10.53.1
+      '@tokento/paypal':
+        specifier: workspace:*
+        version: link:../paypal
       '@tokento/shared':
         specifier: workspace:*
         version: link:../shared

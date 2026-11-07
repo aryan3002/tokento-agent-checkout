@@ -373,7 +373,8 @@ export interface CheckoutOrderView {
   product: { id: string; name: string; sku: string };
   quantity: number;
   subtotal: number;
-  reward: { tokenId: string; amount: number; state: 'held' | 'redeemed' | 'released' | 'reissued' } | null;
+  /** tokenId is null once a released hold is cleared. */
+  reward: { tokenId: string | null; amount: number; state: 'held' | 'redeemed' | 'released' | 'reissued' } | null;
   amountToPay: number;
   earned: { tokenId: string | null; amount: number; state: 'expected' | 'issued' | 'voided' | 'kept' } | null;
   paymentMode: PaymentMode;
