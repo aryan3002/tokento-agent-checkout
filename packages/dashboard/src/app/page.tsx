@@ -1326,7 +1326,7 @@ function DemoTab({ merchant }: { merchant: Merchant | null }) {
   -H "Content-Type: application/json" \\
   -d '{
     "merchantId": "${merchant?.id || "<merchant-id>"}",
-    "customerId": "11111111-1111-1111-1111-111111111111",
+    "customerId": "11111111-1111-4111-8111-111111111111",
     "transactionAmount": 30,
     "earnRuleId": "<earn-rule-id>",
     "idempotencyKey": "demo-mint-1"
@@ -1380,7 +1380,7 @@ function DemoTab({ merchant }: { merchant: Merchant | null }) {
       <div className="glass rounded-xl p-5">
         <h3 className="font-semibold mb-2">3 — Run the demo</h3>
         <ol className="text-sm text-text-secondary space-y-2 list-decimal list-inside">
-          <li>Open Claude Desktop. Ask: <em>&quot;I&apos;m shopping at {merchant?.name || "Coffee Co."}. Check my wallet for customer 11111111-1111-1111-1111-111111111111.&quot;</em></li>
+          <li>Open Claude Desktop. Ask: <em>&quot;I&apos;m shopping at {merchant?.name || "Coffee Co."}. Check my wallet for customer 11111111-1111-4111-8111-111111111111.&quot;</em></li>
           <li>Claude calls <code className="bg-surface-3 px-1 rounded">query_loyalty_tokens</code> via the MCP server.</li>
           <li>Ask Claude to redeem one of the tokens for a $30 transaction.</li>
           <li>Watch this dashboard — the token row will flash and move ACTIVE → REDEEMED, and the Redemptions tab will pick up the new entry within ~50ms via SSE.</li>

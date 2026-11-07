@@ -1,5 +1,5 @@
 // ============================================================
-// Tokento — Database Seed Script
+// Tokento — Database Seed Script (demo data)
 // ============================================================
 // This import MUST come first. crypto.ts captures HMAC_MASTER_KEY at module load,
 // and ES imports are hoisted above statements — so calling dotenv.config() in this
@@ -11,144 +11,123 @@ import { signToken } from '../src/utils/crypto';
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 
+import {
+  ALL_SCOPES, DEMO, DEMO_EARN_RULES, DEMO_MERCHANTS, DEMO_PRODUCTS, demoPayoutEmails, demoProductId,
+} from '../src/demo/demo-data';
+
 const prisma = new PrismaClient();
 
-async function main() {
-  console.log('🌱 Seeding Tokento database...\n');
+// Every write is an upsert keyed by a fixed id, so running the seed twice changes nothing.
 
-  // Create test merchant
-  const merchant = await prisma.merchant.upsert({
-    where: { email: 'demo@coffeeco.com' },
-    update: {},
-    create: {
-      name: 'Coffee Co.',
-      email: 'demo@coffeeco.com',
-      agentOptIn: true,
-      settlementType: 'discount',
-      settlementTiming: 'real_time',
+async function seedToken(params: {
+  id: string; merchantId: string; customerId: string; earnRuleId: string;
+  denomination: number; minimumTransactionFloor: number; expiryDays: number;
+}) {
+  const existing = await prisma.token.findUnique({ where: { id: params.id } });
+  if (existing) return existing;
+
+  const expiryAt = new Date();
+  expiryAt.setDate(expiryAt.getDate() + params.expiryDays);
+  const signature = signToken({
+    tokenId: params.id,
+    merchantId: params.merchantId,
+    customerId: params.customerId,
+    denomination: params.denomination,
+    expiryAt: expiryAt.toISOString(),
+    isSandbox: true,
+    minimumTransactionFloor: params.minimumTransactionFloor,
+    agentPresentableFlag: true,
+  });
+  return prisma.token.create({
+    data: {
+      id: params.id,
+      merchantId: params.merchantId,
+      customerId: params.customerId,
+      earnRuleId: params.earnRuleId,
+      denomination: params.denomination,
+      tokenType: 'loyalty',
+      status: 'ACTIVE',
+      signature,
+      idempotencyKey: `seed-${params.id}`,
+      agentPresentableFlag: true,
+      stackabilityFlag: true,
+      minimumTransactionFloor: params.minimumTransactionFloor,
+      expiryAt,
       isSandbox: true,
     },
   });
-  console.log(`✅ Merchant: ${merchant.name} (${merchant.id})`);
+}
 
-  // Create API key for merchant.
-  // In dev, prefer a deterministic key from DEV_FIXED_API_KEY so the dashboard
-  // and any local scripts stay wired across reseeds. Generate a fresh random
-  // key only if the env var is unset.
-  const rawKey =
-    process.env.DEV_FIXED_API_KEY ||
-    `tk_${crypto.randomBytes(48).toString('base64url')}`;
+async function main() {
+  console.log('Seeding Tokento demo data...\n');
+
+  const payoutEmails = demoPayoutEmails();
+  for (const [i, base] of DEMO_MERCHANTS.entries()) {
+    const m = { ...base, payoutEmail: payoutEmails[i] };
+    const merchant = await prisma.merchant.upsert({
+      where: { email: m.email },
+      update: { name: m.name, ...(m.payoutEmail ? { paypalPayoutEmail: m.payoutEmail } : {}) },
+      create: {
+        id: m.id, name: m.name, email: m.email, agentOptIn: true,
+        settlementType: 'discount', settlementTiming: 'real_time', isSandbox: true,
+        paypalPayoutEmail: m.payoutEmail,
+      },
+    });
+    if (merchant.id !== m.id) {
+      throw new Error(`${m.email} already exists with id ${merchant.id}. Reset the database (pnpm --filter @tokento/api exec prisma migrate reset) and seed again.`);
+    }
+    console.log(`Store: ${merchant.name} (${merchant.id}) payouts to ${merchant.paypalPayoutEmail ?? 'not set'}`);
+  }
+
+  // Coffee Co.'s API key backs the merchant dashboard. A fixed key keeps the
+  // dashboard wired across reseeds; without one a random key is generated.
+  const rawKey = process.env.DEV_FIXED_API_KEY || `tk_${crypto.randomBytes(48).toString('base64url')}`;
   const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
-  const apiKey = await prisma.apiKey.upsert({
+  await prisma.apiKey.upsert({
     where: { keyHash },
     update: {},
     create: {
-      merchantId: merchant.id,
-      keyPrefix: rawKey.substring(0, 8),
-      keyHash,
-      scopes: ['tokens:mint', 'tokens:read', 'tokens:validate', 'tokens:redeem', 'merchants:read', 'merchants:write', 'earn_rules:read', 'earn_rules:write', 'webhooks:read', 'webhooks:write', 'audit:read'],
-      rateLimit: 100,
-      isSandbox: true,
+      merchantId: DEMO.merchants.coffeeCo, keyPrefix: rawKey.substring(0, 8), keyHash,
+      scopes: ALL_SCOPES, rateLimit: 100, isSandbox: true,
     },
   });
-  console.log(`✅ API Key: ${rawKey}`);
-  console.log(`   Prefix: ${apiKey.keyPrefix}`);
-  if (process.env.DEV_FIXED_API_KEY) {
-    console.log('   (sourced from DEV_FIXED_API_KEY env var)');
-  } else {
-    console.log('   ⚠️  No DEV_FIXED_API_KEY set — this key changes every seed.');
-    console.log('       Set DEV_FIXED_API_KEY in .env to keep the dashboard wired.');
-  }
 
-  // Create earn rules
-  const rule1 = await prisma.earnRule.create({
-    data: {
-      merchantId: merchant.id,
-      name: 'Spend $25, Get $5 Off',
-      spendThreshold: 25,
-      tokenDenomination: 5,
-      expiryDays: 90,
-      agentPresentableFlag: true,
-      stackabilityFlag: true,
-      minimumTransactionFloor: 10,
-    },
-  });
-  console.log(`✅ Earn Rule: ${rule1.name} (${rule1.id})`);
-
-  const rule2 = await prisma.earnRule.create({
-    data: {
-      merchantId: merchant.id,
-      name: 'Spend $50, Get $12 Off',
-      spendThreshold: 50,
-      tokenDenomination: 12,
-      expiryDays: 60,
-      agentPresentableFlag: true,
-      stackabilityFlag: true,
-      minimumTransactionFloor: 20,
-    },
-  });
-  console.log(`✅ Earn Rule: ${rule2.name} (${rule2.id})`);
-
-  // Create test customer wallet
-  const customerId = '11111111-1111-1111-1111-111111111111';
-  const wallet = await prisma.wallet.upsert({
-    where: { customerId },
-    update: {},
-    create: { customerId },
-  });
-  console.log(`✅ Wallet: ${customerId}`);
-
-  // Mint test tokens.
-  // Signing goes through the canonical helper — this file previously rebuilt the
-  // payload inline, which silently drifted from the real one and produced tokens
-  // that failed signature verification.
-
-  for (let i = 0; i < 3; i++) {
-    const tokenId = crypto.randomUUID();
-    const expiryAt = new Date();
-    expiryAt.setDate(expiryAt.getDate() + 90);
-
-    const signature = signToken({
-      tokenId,
-      merchantId: merchant.id,
-      customerId,
-      denomination: 5,
-      expiryAt: expiryAt.toISOString(),
-      isSandbox: true,
-      minimumTransactionFloor: 10,
-      agentPresentableFlag: true,
+  for (const r of DEMO_EARN_RULES) {
+    await prisma.earnRule.upsert({
+      where: { id: r.id },
+      update: { name: r.name, spendThreshold: r.spendThreshold, tokenDenomination: r.tokenDenomination },
+      create: { ...r, agentPresentableFlag: true, stackabilityFlag: true },
     });
-
-    const token = await prisma.token.create({
-      data: {
-        id: tokenId,
-        merchantId: merchant.id,
-        customerId,
-        earnRuleId: rule1.id,
-        denomination: 5,
-        tokenType: 'loyalty',
-        status: 'ACTIVE',
-        signature,
-        idempotencyKey: `seed-${i}-${Date.now()}`,
-        agentPresentableFlag: true,
-        stackabilityFlag: true,
-        minimumTransactionFloor: 10,
-        expiryAt,
-        isSandbox: true,
-      },
-    });
-    console.log(`✅ Token: $${token.denomination} (${token.id})`);
   }
+  console.log(`Earn rules: ${DEMO_EARN_RULES.map((r) => r.name).join(', ')}`);
 
-  console.log('\n🎉 Seed complete!\n');
-  console.log('--- Test Credentials ---');
-  console.log(`Merchant ID: ${merchant.id}`);
-  console.log(`Customer ID: ${customerId}`);
-  console.log(`API Key:     ${rawKey}`);
-  console.log(`Earn Rule 1: ${rule1.id}`);
-  console.log(`Earn Rule 2: ${rule2.id}`);
+  for (const [n, merchantId, sku, name, category, price, description] of DEMO_PRODUCTS) {
+    await prisma.product.upsert({
+      where: { id: demoProductId(n) },
+      update: { name, category, price, description },
+      create: { id: demoProductId(n), merchantId, sku, name, category, price, description, isSandbox: true },
+    });
+  }
+  console.log(`Products: ${DEMO_PRODUCTS.length}`);
+
+  await prisma.wallet.upsert({ where: { customerId: DEMO.customerId }, update: {}, create: { customerId: DEMO.customerId } });
+  await seedToken({
+    id: DEMO.tokens.mayaCoffee5, merchantId: DEMO.merchants.coffeeCo, customerId: DEMO.customerId,
+    earnRuleId: DEMO.rules.coffeeSpend20, denomination: 5, minimumTransactionFloor: 10, expiryDays: 90,
+  });
+  await seedToken({
+    id: DEMO.tokens.mayaRidgeline3, merchantId: DEMO.merchants.ridgeline, customerId: DEMO.customerId,
+    earnRuleId: DEMO.rules.ridgelineSpend40, denomination: 3, minimumTransactionFloor: 30, expiryDays: 60,
+  });
+  console.log(`Shopper: Maya (${DEMO.customerId}) with a $5 Coffee Co. reward and a $3 Ridgeline reward`);
+
+  console.log('\nSeed complete.');
+  console.log(`Dashboard API key (Coffee Co.): ${rawKey.substring(0, 8)}… (DEV_FIXED_API_KEY)`);
 }
 
 main()
-  .catch(console.error)
+  .catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  })
   .finally(() => prisma.$disconnect());

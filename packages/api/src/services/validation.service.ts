@@ -68,6 +68,17 @@ export class ValidationService {
       };
     }
 
+    // A refund of the purchase that earned this reward cancelled it.
+    if (token.status === TokenStatus.VOIDED) {
+      return {
+        valid: false,
+        tokenId,
+        denomination: toMoneyNumber(token.denomination),
+        reasonCode: ValidationReasonCode.TOKEN_VOIDED,
+        reasonMessage: 'Token was voided because the purchase that earned it was refunded.',
+      };
+    }
+
     // Check expiry
     if (new Date() > token.expiryAt) {
       // Auto-mark as expired

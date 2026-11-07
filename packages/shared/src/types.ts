@@ -17,6 +17,8 @@ export enum TokenStatus {
   ACTIVE = 'ACTIVE',
   REDEEMED = 'REDEEMED',
   EXPIRED = 'EXPIRED',
+  /** Cancelled by a refund of the purchase that earned it. */
+  VOIDED = 'VOIDED',
 }
 
 export enum SettlementType {
@@ -275,6 +277,7 @@ export enum ValidationReasonCode {
   SIGNATURE_INVALID = 'signature_invalid',
   TOKEN_NOT_FOUND = 'token_not_found',
   SANDBOX_PRODUCTION_MISMATCH = 'sandbox_production_mismatch',
+  TOKEN_VOIDED = 'token_voided',
 }
 
 // ---- Event Types ----
@@ -290,4 +293,99 @@ export enum EventType {
   WALLET_CREATED = 'wallet.created',
   WEBHOOK_DELIVERED = 'webhook.delivered',
   WEBHOOK_FAILED = 'webhook.failed',
+  CHECKOUT_CREATED = 'checkout.created',
+  CHECKOUT_COMPLETED = 'checkout.completed',
+  CHECKOUT_REFUNDED = 'checkout.refunded',
+  CHECKOUT_CANCELLED = 'checkout.cancelled',
+  SETTLEMENT_CREATED = 'settlement.created',
+  SETTLEMENT_UPDATED = 'settlement.updated',
+  PAYPAL_WEBHOOK = 'paypal.webhook',
+}
+
+// ---- Agent checkout (PayPal) ----
+
+export enum CheckoutStatus {
+  /** Row written and the reward held; PayPal order not created yet. */
+  PENDING = 'PENDING',
+  /** PayPal order created; waiting for the shopper to approve. */
+  CREATED = 'CREATED',
+  APPROVED = 'APPROVED',
+  /** PayPal accepted the capture but is holding the funds. */
+  CAPTURE_PENDING = 'CAPTURE_PENDING',
+  /** Money captured; reward redemption and earning in progress. */
+  CAPTURED = 'CAPTURED',
+  COMPLETED = 'COMPLETED',
+  /** Captured amount did not match the order. Nothing redeemed or earned. */
+  NEEDS_REVIEW = 'NEEDS_REVIEW',
+  REFUND_PENDING = 'REFUND_PENDING',
+  REFUNDED = 'REFUNDED',
+  CANCELLED = 'CANCELLED',
+  FAILED = 'FAILED',
+}
+
+export type PaymentMode = 'approval' | 'vault';
+
+export type MandateViolationCode =
+  | 'no_mandate'
+  | 'expired'
+  | 'store_not_allowed'
+  | 'over_per_purchase_max'
+  | 'over_monthly_cap';
+
+/** One store's offer for a product, priced with the shopper's rewards. Amounts in USD. */
+export interface OfferView {
+  productId: string;
+  productName: string;
+  sku: string;
+  merchantId: string;
+  merchantName: string;
+  unitPrice: number;
+  quantity: number;
+  subtotal: number;
+  /** Reward that would be applied now, if any. */
+  reward: { tokenId: string; amount: number } | null;
+  /** What PayPal would charge. */
+  amountToPay: number;
+  /** Reward this purchase would earn at the same store, if any. */
+  earn: { ruleId: string; ruleName: string; amount: number } | null;
+  /** amountToPay minus the reward earned back. */
+  effectiveCost: number;
+  /** null when no budget was given. */
+  withinBudget: boolean | null;
+  mandate: { within: boolean; code?: MandateViolationCode; message?: string };
+  /** Plain-language explanation the agent can repeat. */
+  reason: string;
+}
+
+export interface QuoteResponse {
+  offers: OfferView[];
+  recommendedProductId: string | null;
+  comparison: string;
+}
+
+export type SettlementState = 'unsettled' | 'processing' | 'paid' | 'failed';
+
+export interface CheckoutOrderView {
+  id: string;
+  status: CheckoutStatus;
+  customerId: string;
+  merchant: { id: string; name: string };
+  product: { id: string; name: string; sku: string };
+  quantity: number;
+  subtotal: number;
+  reward: { tokenId: string; amount: number; state: 'held' | 'redeemed' | 'released' | 'reissued' } | null;
+  amountToPay: number;
+  earned: { tokenId: string | null; amount: number; state: 'expected' | 'issued' | 'voided' | 'kept' } | null;
+  paymentMode: PaymentMode;
+  outsideMandate: boolean;
+  paypal: { orderId: string | null; captureId: string | null; refundId: string | null; approvalUrl: string | null };
+  platformFee: number;
+  settlement: { batchId: string | null; state: SettlementState };
+  agentReason: string | null;
+  note: string | null;
+  /** One-line receipt: price, reward used, paid with PayPal, reward earned. */
+  receipt: string;
+  createdAt: string;
+  completedAt: string | null;
+  refundedAt: string | null;
 }

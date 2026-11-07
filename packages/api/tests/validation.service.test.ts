@@ -76,6 +76,20 @@ describe('validation service reason codes', () => {
     expect(result.reasonCode).toBe(ValidationReasonCode.TOKEN_REDEEMED);
   });
 
+  it('returns token_voided for a reward cancelled by a refund, even before its expiry', async () => {
+    mocks.prismaMock.token.findUnique.mockResolvedValue(makeToken({
+      status: TokenStatus.VOIDED,
+    }));
+
+    const result = await validationService.validate('token-1', {
+      transactionAmount: 50,
+      merchantId: 'merchant-1',
+    }, true);
+
+    expect(result.valid).toBe(false);
+    expect(result.reasonCode).toBe('token_voided');
+  });
+
   it('returns token_expired and updates status when expired', async () => {
     mocks.prismaMock.token.findUnique.mockResolvedValue(makeToken({
       expiryAt: new Date(Date.now() - 3600_000),
