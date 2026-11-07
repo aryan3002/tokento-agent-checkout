@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, FormEvent } from "re
 import { FirstRun } from "./components/FirstRun";
 import { AgentOrdersTab, type StreamEvent } from "./components/AgentOrdersTab";
 import { PayoutsTab } from "./components/PayoutsTab";
+import { overviewStats } from "./components/overview";
 
 // All API traffic goes through the same-origin server proxy at /api/proxy, which
 // attaches the merchant API key server-side. No credential is shipped to the browser.
@@ -29,7 +30,8 @@ type Token = {
   merchantId: string;
   customerId: string;
   earnRuleId: string;
-  denomination: number;
+  /** Decimal: the API sends it as a string ("5"). */
+  denomination: number | string;
   tokenType: string;
   status: "ACTIVE" | "REDEEMED" | "EXPIRED" | "REJECTED";
   agentPresentableFlag: boolean;
@@ -486,12 +488,7 @@ export default function Dashboard() {
     return map;
   }, [earnRules]);
 
-  const stats = useMemo(() => ({
-    tokensIssued: tokens.length,
-    activeTokens: tokens.filter((t) => t.status === "ACTIVE").length,
-    redemptions: redemptions.length,
-    totalValue: tokens.reduce((sum, t) => sum + t.denomination, 0),
-  }), [tokens, redemptions]);
+  const stats = useMemo(() => overviewStats(tokens, redemptions), [tokens, redemptions]);
 
   return (
     <div className="flex min-h-screen">
@@ -693,7 +690,7 @@ function OverviewTab({
         <StatCard icon="01" label="Tokens Issued" value={stats.tokensIssued} />
         <StatCard icon="02" label="Active Tokens" value={stats.activeTokens} />
         <StatCard icon="03" label="Redemptions" value={stats.redemptions} />
-        <StatCard icon="04" label="Total Value" value={`$${stats.totalValue}`} />
+        <StatCard icon="04" label="Total Value" value={`$${stats.totalValue.toFixed(2)}`} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
