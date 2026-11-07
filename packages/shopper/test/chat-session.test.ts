@@ -4,6 +4,7 @@ import {
   APPROVED_MESSAGE,
   afterPayPal,
   finishRedirect,
+  finishVaultRedirect,
   loadTranscript,
   redirectOutcome,
   saveTranscript,
@@ -239,5 +240,23 @@ describe("transcript helpers for the app shell", () => {
   it("adds a notice line in the given tone", () => {
     const t = addNotice(emptyTranscript(), "You cancelled in PayPal.", "info");
     expect(t.entries).toEqual([expect.objectContaining({ kind: "notice", text: "You cancelled in PayPal.", tone: "info" })]);
+  });
+});
+
+describe("finishVaultRedirect", () => {
+  it("confirms the saved PayPal after the one-time approval, then returns to the chat", async () => {
+    const fetchImpl = vi.fn(async () => Response.json({ vault: { status: "ACTIVE" } }));
+    await expect(finishVaultRedirect("return", `?mandate=${ORDER_ID}&approval_token_id=X`, fetchImpl)).resolves.toBe("/?linked=1");
+    expect(fetchImpl).toHaveBeenCalledWith(`/api/mandate/${ORDER_ID}/vault/confirm`, { method: "POST" });
+  });
+
+  it("says so when PayPal didn't confirm, and does nothing on cancel or a bad link", async () => {
+    const refused = vi.fn(async () => Response.json({ error: { code: "vault_not_approved" } }, { status: 409 }));
+    await expect(finishVaultRedirect("return", `?mandate=${ORDER_ID}`, refused)).resolves.toBe("/?linked=0");
+
+    const fetchImpl = vi.fn(async () => Response.json({}));
+    await expect(finishVaultRedirect("cancel", `?mandate=${ORDER_ID}`, fetchImpl)).resolves.toBe("/");
+    await expect(finishVaultRedirect("return", "?mandate=nope", fetchImpl)).resolves.toBe("/");
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });

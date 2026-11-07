@@ -49,6 +49,21 @@ export function MandatePanel({ data, onChanged }: { data: MandateData | null; on
     }
   }
 
+  async function linkPayPal() {
+    if (!mandate) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/mandate/${mandate.id}/vault/setup`, { method: "POST" });
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !body?.approvalUrl) throw new Error(body?.error?.message ?? "Could not open PayPal.");
+      window.location.href = body.approvalUrl;
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  }
+
   async function turnOff() {
     if (!mandate) return;
     setBusy(true);
@@ -132,9 +147,22 @@ export function MandatePanel({ data, onChanged }: { data: MandateData | null; on
           <p className="text-xs text-text-muted">
             {mandate.allowedStores.map((s) => s.name).join(", ")} · until {mandate.expiresAt.slice(0, 10)}
           </p>
-          <p className="text-xs text-text-secondary">
-            Inside these limits the agent goes ahead; anything outside them, it asks you first.
-          </p>
+          {mandate.vault.status === "ACTIVE" ? (
+            <p className="text-xs text-text-secondary">
+              <span className="text-success">✓ PayPal linked.</span> Inside these limits the agent pays without a new approval; anything outside them, it asks you first.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xs text-text-secondary">
+                Inside these limits the agent goes ahead and you approve each payment in PayPal; anything outside them, it asks you first.
+              </p>
+              <button type="button" disabled={busy} onClick={() => void linkPayPal()}
+                className="rounded-sm bg-text-primary px-3 py-1.5 text-xs font-medium text-surface-1 disabled:opacity-50">
+                {busy ? "Opening PayPal…" : "Link PayPal once"}
+              </button>
+              <p className="text-[11px] text-text-muted">Approve once in PayPal; after that the agent pays inside these limits without asking.</p>
+            </div>
+          )}
         </div>
       ) : (
         <div className="mt-3 space-y-2 text-sm">

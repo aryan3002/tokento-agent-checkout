@@ -41,4 +41,18 @@ router.post('/:id/revoke', rateLimit('DEFAULT'), async (req: Request, res: Respo
   } catch (err) { next(err); }
 });
 
+// POST /v1/mandates/:id/vault/setup — "Link PayPal once": returns PayPal's approval page
+router.post('/:id/vault/setup', rateLimit('DEFAULT'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json(await mandateService.startVault(req.customerId!, param(req, 'id')));
+  } catch (err) { next(err); }
+});
+
+// POST /v1/mandates/:id/vault/confirm — after the shopper approved in PayPal
+router.post('/:id/vault/confirm', rateLimit('DEFAULT'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json(await mandateService.confirmVault(req.customerId!, param(req, 'id')));
+  } catch (err) { next(err); }
+});
+
 export default router;

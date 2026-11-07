@@ -15,7 +15,7 @@ import { mandateService } from '../mandates/mandate.service';
 import { validationService } from '../services/validation.service';
 import { logger } from '../utils/logger';
 import { toMoneyNumber } from '../utils/money';
-import { finalizeLocked, type FinalizeSource } from './finalize';
+import { finalizeCapture, finalizeLocked, type FinalizeSource } from './finalize';
 import { withOrderLock } from './order-lock';
 import { getPayPal, shopperAppUrl } from './paypal';
 import { activeRules, assertQuantity, availableRewards, loadProducts, priceProduct, type ProductWithMerchant } from './quote.service';
@@ -95,6 +95,10 @@ export class CheckoutService {
           `${decision.message} Ask the shopper first. If they agree, retry with paymentMode "approval" so they approve this payment in PayPal themselves.`,
           { mandateCode: decision.code });
       }
+      // Pay with the saved PayPal only inside the limits, once linking is confirmed, and only when the agent didn't ask for an approval.
+      const vaultId = decision.within && input.paymentMode === 'auto' && decision.mandate.vaultStatus === 'ACTIVE'
+        ? decision.mandate.paypalPaymentTokenId
+        : null;
 
       let order: OrderWithRelations;
       try {
@@ -111,7 +115,7 @@ export class CheckoutService {
             earnRuleId: price.earn?.ruleId ?? null,
             expectedEarn: price.earn?.amount ?? 0,
             status: CheckoutStatus.PENDING,
-            paymentMode: 'approval',
+            paymentMode: vaultId ? 'vault' : 'approval',
             outsideMandate: outside,
             mandateId: decision.mandate?.id ?? null,
             agentId: ctx.agentId ?? null,
@@ -134,7 +138,7 @@ export class CheckoutService {
         throw err;
       }
 
-      return this.openWithPayPal(order, product, price, subtotal);
+      return this.openWithPayPal(order, product, price, subtotal, vaultId);
     }
 
     throw new AppError(409, 'reward_contention', 'Could not reserve a reward for this order. Try again.');
@@ -145,11 +149,13 @@ export class CheckoutService {
     product: ProductWithMerchant,
     price: OfferPrice,
     subtotal: Prisma.Decimal,
+    vaultId: string | null = null,
   ): Promise<CheckoutOrderView> {
     const description = order.quantity > 1 ? `${product.name} x ${order.quantity}` : product.name;
+    let ppOrder: PayPalOrder;
+    let updated: OrderWithRelations;
     try {
-      const paypal = getPayPal();
-      const ppOrder = await paypal.createOrder({
+      ppOrder = await getPayPal().createOrder({
         customId: order.id,
         invoiceId: order.id,
         description: description.slice(0, 127),
@@ -160,54 +166,71 @@ export class CheckoutService {
           ...(price.reward ? { discount: toPayPalAmount(price.reward.amount) } : {}),
         },
         items: [{ name: product.name.slice(0, 127), quantity: order.quantity, unitAmount: toPayPalAmount(product.price), sku: product.sku }],
-        payment: {
-          kind: 'approval',
-          returnUrl: `${shopperAppUrl()}/checkout/return?checkout=${order.id}`,
-          cancelUrl: `${shopperAppUrl()}/checkout/cancel?checkout=${order.id}`,
-          brandName: `${product.merchant.name} via Tokento`.slice(0, 127),
-        },
+        payment: vaultId
+          ? { kind: 'vault', vaultId }
+          : {
+              kind: 'approval',
+              returnUrl: `${shopperAppUrl()}/checkout/return?checkout=${order.id}`,
+              cancelUrl: `${shopperAppUrl()}/checkout/cancel?checkout=${order.id}`,
+              brandName: `${product.merchant.name} via Tokento`.slice(0, 127),
+            },
       }, { requestId: order.id });
 
-      const updated = await prisma.checkoutOrder.update({
+      updated = await prisma.checkoutOrder.update({
         where: { id: order.id },
         data: { paypalOrderId: ppOrder.id, approvalUrl: approvalUrlOf(ppOrder), status: CheckoutStatus.CREATED },
         include: ORDER_INCLUDE,
       });
-
-      emitEvent(EventType.CHECKOUT_CREATED, {
-        checkoutId: updated.id,
-        merchantId: updated.merchantId,
-        customerId: updated.customerId,
-        productName: product.name,
-        subtotal: toMoneyNumber(updated.subtotal),
-        rewardAmount: toMoneyNumber(updated.rewardAmount),
-        amountToPay: toMoneyNumber(updated.amountToPay),
-        paypalOrderId: ppOrder.id,
-        status: updated.status,
-      });
-      logger.info({ checkoutId: updated.id, paypalOrderId: ppOrder.id }, 'Checkout created');
-      return this.view(updated);
     } catch (err) {
-      await prisma.checkoutOrder.update({
-        where: { id: order.id },
-        data: {
-          status: CheckoutStatus.FAILED,
-          rewardTokenId: null,
-          note: err instanceof PayPalApiError
-            ? `PayPal refused to create the order (${err.name}${err.debugId ? `, debug_id ${err.debugId}` : ''}).`
-            : err instanceof AppError
-              ? `${err.message} Nothing was charged.`
-              : 'Could not create the PayPal order. Nothing was charged.',
-        },
-      });
-      if (err instanceof PayPalApiError) {
-        throw new AppError(502, 'paypal_unavailable', 'PayPal could not create the order. Nothing was charged; try again.', {
-          paypalError: err.name,
-          debugId: err.debugId,
-        });
-      }
-      throw err;
+      return this.failCreate(order, err);
     }
+
+    emitEvent(EventType.CHECKOUT_CREATED, {
+      checkoutId: updated.id,
+      merchantId: updated.merchantId,
+      customerId: updated.customerId,
+      productName: product.name,
+      subtotal: toMoneyNumber(updated.subtotal),
+      rewardAmount: toMoneyNumber(updated.rewardAmount),
+      amountToPay: toMoneyNumber(updated.amountToPay),
+      paypalOrderId: ppOrder.id,
+      status: updated.status,
+    });
+    logger.info({ checkoutId: updated.id, paypalOrderId: ppOrder.id, vault: Boolean(vaultId) }, 'Checkout created');
+    if (!vaultId) return this.view(updated);
+
+    // The saved PayPal: PayPal captures a vault order at create. Finalize from that capture, or capture now if it didn't.
+    const capture = captureOf(ppOrder);
+    if (!capture) return this.capture(order.id, { kind: 'customer', customerId: order.customerId });
+    return finalizeCapture(order.id, {
+      captureId: capture.id,
+      status: capture.status,
+      amount: capture.amount.value,
+      currency: capture.amount.currency_code,
+    }, 'capture_response');
+  }
+
+  /** PayPal create failed: nothing was charged, so fail the order and release the reward. */
+  private async failCreate(order: OrderWithRelations, err: unknown): Promise<never> {
+    await prisma.checkoutOrder.update({
+      where: { id: order.id },
+      data: {
+        status: CheckoutStatus.FAILED,
+        rewardTokenId: null,
+        note: err instanceof PayPalApiError
+          ? `PayPal refused to create the order (${err.name}${err.debugId ? `, debug_id ${err.debugId}` : ''}).`
+          : err instanceof AppError
+            ? `${err.message} Nothing was charged.`
+            : 'Could not create the PayPal order. Nothing was charged.',
+      },
+    });
+    if (err instanceof PayPalApiError) {
+      throw new AppError(502, 'paypal_unavailable', 'PayPal could not create the order. Nothing was charged; try again.', {
+        paypalError: err.name,
+        debugId: err.debugId,
+      });
+    }
+    throw err;
   }
 
   /**

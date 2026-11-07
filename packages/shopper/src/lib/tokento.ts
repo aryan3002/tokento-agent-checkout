@@ -108,6 +108,12 @@ export function tokentoClient(sessionToken: string, fetchImpl: FetchLike = fetch
     revokeMandate(id: string) {
       return call<MandateView>("POST", `/mandates/${encodeURIComponent(id)}/revoke`);
     },
+    startVault(id: string) {
+      return call<{ approvalUrl: string; mandate: MandateView }>("POST", `/mandates/${encodeURIComponent(id)}/vault/setup`);
+    },
+    confirmVault(id: string) {
+      return call<MandateView>("POST", `/mandates/${encodeURIComponent(id)}/vault/confirm`);
+    },
   };
 }
 

@@ -217,3 +217,87 @@ describe('checkout with spending limits', () => {
     expect(res.body).toMatchObject({ status: CheckoutStatus.CREATED, paymentMode: 'approval', outsideMandate: false });
   });
 });
+
+describe('approve once (PayPal vault)', () => {
+  const future = () => new Date(Date.now() + 86_400_000);
+  const linked = (customerId: string, over: Partial<Prisma.MandateUncheckedCreateInput> = {}) =>
+    mandate(customerId, { vaultStatus: 'ACTIVE', paypalPaymentTokenId: 'VAULT-tok-1', expiresAt: future(), ...over });
+  const buy = (customerId: string, extra: Record<string, unknown> = {}) =>
+    request(app).post('/api/v1/checkout/orders').set(as(customerId)).set('Idempotency-Key', randomUUID()).send({ productId: coffee.products.beans, ...extra });
+  const withReward = async () => {
+    const customerId = await db.shopper();
+    await db.reward({ customerId, merchantId: coffee.merchantId, earnRuleId: coffee.ruleIds[0], denomination: 5, floor: 10 });
+    return customerId;
+  };
+
+  it('pays inside the limits with the saved PayPal, with no approval step', async () => {
+    const customerId = await withReward();
+    await linked(customerId);
+
+    const res = await buy(customerId);
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ status: CheckoutStatus.COMPLETED, paymentMode: 'vault', amountToPay: 23, reward: { state: 'redeemed' }, earned: { state: 'issued' } });
+    const [input] = holder.fake.callsTo('createOrder')[0].args as [{ payment: unknown }];
+    expect(input.payment).toEqual({ kind: 'vault', vaultId: 'VAULT-tok-1' });
+    expect(holder.fake.callsTo('captureOrder')).toHaveLength(0);
+  });
+
+  it('never uses the saved PayPal outside the limits: refused, or a normal approval if the shopper agrees', async () => {
+    const customerId = await withReward();
+    await linked(customerId, { perPurchaseMax: D('22.99') });
+
+    expect((await buy(customerId)).status).toBe(403);
+    const approved = await buy(customerId, { paymentMode: 'approval' });
+    expect(approved.body).toMatchObject({ status: CheckoutStatus.CREATED, paymentMode: 'approval', outsideMandate: true });
+    const inputs = holder.fake.callsTo('createOrder').map((c) => (c.args[0] as { payment: { kind: string } }).payment.kind);
+    expect(inputs).toEqual(['approval']);
+  });
+
+  it('only pays without approval once linking PayPal is confirmed', async () => {
+    const customerId = await withReward();
+    await mandate(customerId, { vaultStatus: 'PENDING_APPROVAL', paypalSetupTokenId: `SETUP-${randomUUID()}`, expiresAt: future() });
+
+    const res = await buy(customerId);
+    expect(res.body).toMatchObject({ status: CheckoutStatus.CREATED, paymentMode: 'approval' });
+  });
+
+  it('revoking the limits stops payments without approval', async () => {
+    const customerId = await withReward();
+    const m = await linked(customerId);
+    await request(app).post(`/api/v1/mandates/${m.id}/revoke`).set(as(customerId));
+
+    const res = await buy(customerId);
+    expect(res.body).toMatchObject({ status: CheckoutStatus.CREATED, paymentMode: 'approval' });
+  });
+
+  it("links PayPal once: setup returns PayPal's approval page, confirm saves the payment method", async () => {
+    const customerId = await db.shopper();
+    const created = await request(app).post('/api/v1/mandates').set(as(customerId))
+      .send({ perPurchaseMax: 30, monthlyCap: 100, allowedMerchantIds: [coffee.merchantId], expiresInDays: 30 });
+
+    const setup = await request(app).post(`/api/v1/mandates/${created.body.id}/vault/setup`).set(as(customerId));
+    expect(setup.status).toBe(200);
+    expect(setup.body.approvalUrl).toContain('sandbox.paypal.com');
+    expect(setup.body.mandate.vault).toEqual({ status: 'PENDING_APPROVAL' });
+    const [input] = holder.fake.callsTo('createSetupToken')[0].args as [{ returnUrl: string; cancelUrl: string }];
+    expect(input.returnUrl).toContain(`/mandate/vault/return?mandate=${created.body.id}`);
+
+    const confirmed = await request(app).post(`/api/v1/mandates/${created.body.id}/vault/confirm`).set(as(customerId));
+    expect(confirmed.status).toBe(200);
+    expect(confirmed.body.vault).toEqual({ status: 'ACTIVE' });
+    expect((await prisma.mandate.findUniqueOrThrow({ where: { id: created.body.id } })).paypalPaymentTokenId).toMatch(/^VAULT-SETUP-/);
+  });
+
+  it("can't be linked for someone else's limits, or confirmed before PayPal was asked", async () => {
+    const owner = await db.shopper();
+    const other = await db.shopper();
+    const created = await request(app).post('/api/v1/mandates').set(as(owner))
+      .send({ perPurchaseMax: 30, monthlyCap: 100, allowedMerchantIds: [coffee.merchantId], expiresInDays: 30 });
+
+    expect((await request(app).post(`/api/v1/mandates/${created.body.id}/vault/setup`).set(as(other))).status).toBe(404);
+    const early = await request(app).post(`/api/v1/mandates/${created.body.id}/vault/confirm`).set(as(owner));
+    expect(early.status).toBe(409);
+    expect(early.body.error.code).toBe('vault_not_started');
+  });
+});

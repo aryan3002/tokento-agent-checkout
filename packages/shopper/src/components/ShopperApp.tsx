@@ -150,6 +150,15 @@ export function ShopperApp() {
       const latest = await refreshSidebar();
       if (stale) return;
       if (latest) dispatch({ type: "sync", orders: latest });
+      const linked = new URLSearchParams(window.location.search).get("linked");
+      if (linked) {
+        window.history.replaceState(null, "", window.location.pathname);
+        dispatch(
+          linked === "1"
+            ? { type: "notice", tone: "info", text: "PayPal is linked. Inside your spending limits the agent can now pay without asking each time." }
+            : { type: "notice", tone: "error", text: "PayPal didn't confirm the link. Try Link PayPal once again." },
+        );
+      }
       const outcome = redirectOutcome(window.location.search);
       if (outcome) {
         window.history.replaceState(null, "", window.location.pathname);

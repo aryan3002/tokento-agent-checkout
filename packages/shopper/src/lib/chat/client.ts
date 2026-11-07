@@ -135,3 +135,18 @@ export function afterPayPal(kind: RedirectOutcome["kind"], order: CheckoutOrderV
     },
   };
 }
+
+/**
+ * PayPal sends the shopper to /mandate/vault/return (or /cancel) with `?mandate=<id>` after the
+ * one-time "Link PayPal" approval. Confirm the saved PayPal, then go back to the chat.
+ */
+export async function finishVaultRedirect(page: "return" | "cancel", search: string, fetchImpl: Fetch): Promise<string> {
+  const id = new URLSearchParams(search).get("mandate");
+  if (page === "cancel" || !id || !UUID.test(id)) return "/";
+  try {
+    const res = await fetchImpl(`/api/mandate/${id}/vault/confirm`, { method: "POST" });
+    return res.ok ? "/?linked=1" : "/?linked=0";
+  } catch {
+    return "/?linked=0";
+  }
+}

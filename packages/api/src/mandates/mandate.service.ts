@@ -5,8 +5,10 @@
 // a monthly cap, the stores allowed, and an expiry. Checkout and the quote ask
 // evaluate(); only the shopper's own session can set or revoke limits.
 import type { Mandate, Prisma } from '@prisma/client';
+import { approvalUrlOf, PayPalApiError } from '@tokento/paypal';
 import { CheckoutStatus, type MandateView, type MandateViolationCode } from '@tokento/shared';
 import prisma from '../db/client';
+import { getPayPal, shopperAppUrl } from '../checkout/paypal';
 import { AppError } from '../middleware/error.middleware';
 import { toMoney, toMoneyNumber } from '../utils/money';
 
@@ -95,6 +97,49 @@ export class MandateService {
       ? mandate
       : await prisma.mandate.update({ where: { id: mandate.id }, data: { status: 'REVOKED', revokedAt: new Date() } });
     return this.view(revoked);
+  }
+
+  private async ownActive(customerId: string, mandateId: string): Promise<Mandate> {
+    const mandate = await prisma.mandate.findFirst({ where: { id: mandateId, customerId, status: 'ACTIVE' } });
+    if (!mandate) throw new AppError(404, 'mandate_not_found', 'Spending limits not found.');
+    return mandate;
+  }
+
+  /** "Link PayPal once": ask PayPal to save the shopper's PayPal for purchases inside these limits. */
+  async startVault(customerId: string, mandateId: string): Promise<{ approvalUrl: string; mandate: MandateView }> {
+    const mandate = await this.ownActive(customerId, mandateId);
+    const setup = await getPayPal().createSetupToken({
+      returnUrl: `${shopperAppUrl()}/mandate/vault/return?mandate=${mandate.id}`,
+      cancelUrl: `${shopperAppUrl()}/mandate/vault/cancel?mandate=${mandate.id}`,
+      description: 'Purchases by your Tokento shopping agent inside the spending limits you set',
+      brandName: 'Tokento',
+    }, { requestId: `vault-setup:${mandate.id}:${mandate.updatedAt.getTime()}` });
+    const approvalUrl = approvalUrlOf(setup);
+    if (!approvalUrl) throw new AppError(502, 'paypal_unexpected', 'PayPal did not return an approval page.');
+    const updated = await prisma.mandate.update({
+      where: { id: mandate.id },
+      data: { paypalSetupTokenId: setup.id, vaultStatus: 'PENDING_APPROVAL' },
+    });
+    return { approvalUrl, mandate: await this.view(updated) };
+  }
+
+  /** After the shopper approves in PayPal: turn the approval into a saved payment method. */
+  async confirmVault(customerId: string, mandateId: string): Promise<MandateView> {
+    const mandate = await this.ownActive(customerId, mandateId);
+    if (mandate.vaultStatus === 'ACTIVE') return this.view(mandate);
+    if (!mandate.paypalSetupTokenId) throw new AppError(409, 'vault_not_started', 'Link PayPal first.');
+    try {
+      const token = await getPayPal().createPaymentToken(mandate.paypalSetupTokenId, { requestId: `vault-token:${mandate.paypalSetupTokenId}` });
+      const updated = await prisma.mandate.update({
+        where: { id: mandate.id },
+        data: { vaultStatus: 'ACTIVE', paypalPaymentTokenId: token.id, paypalCustomerId: token.customer?.id ?? null },
+      });
+      return this.view(updated);
+    } catch (err) {
+      if (!(err instanceof PayPalApiError)) throw err;
+      await prisma.mandate.update({ where: { id: mandate.id }, data: { vaultStatus: 'FAILED' } });
+      throw new AppError(409, 'vault_not_approved', 'PayPal has not confirmed the approval. Try linking PayPal again.', { paypalError: err.name });
+    }
   }
 
   async view(mandate: Mandate, now: Date = new Date()): Promise<MandateView> {
