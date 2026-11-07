@@ -78,6 +78,8 @@ export function ShopperApp() {
   const historyRef = useRef<Transcript["history"]>([]);
   const queueRef = useRef<string[]>([]);
   const busyRef = useRef(false);
+  // Whether this server has a model to talk to; set once the demo session starts.
+  const agentReadyRef = useRef(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   const refreshSidebar = useCallback(async () => {
@@ -121,7 +123,8 @@ export function ShopperApp() {
   const follow = useCallback(
     (result: AfterPayPal) => {
       if (result.notice) dispatch({ type: "notice", ...result.notice });
-      if (result.autoSend) void send(result.autoSend);
+      // With chat off, the refreshed wallet and order list show the outcome instead.
+      if (result.autoSend && agentReadyRef.current) void send(result.autoSend);
     },
     [send],
   );
@@ -136,6 +139,7 @@ export function ShopperApp() {
       if (!res.ok || !data.session) throw new Error("no session");
       const saved = loadTranscript(browserStorage(), data.session.customerId);
       historyRef.current = saved.history;
+      agentReadyRef.current = data.agentConfigured;
       dispatch({ type: "load", transcript: saved });
       setDemo(data);
 
@@ -237,7 +241,7 @@ export function ShopperApp() {
       {demo && !demo.agentConfigured && (
         <div className="border-b border-border bg-surface-2">
           <p className="mx-auto max-w-6xl px-4 py-2 text-sm text-text-secondary">
-            Chat is off on this server: no Anthropic API key is set. The wallet and orders still load.
+            Chat is off on this server: no Azure OpenAI deployment is configured. The wallet and orders still load.
           </p>
         </div>
       )}

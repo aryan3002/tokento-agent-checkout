@@ -1,7 +1,10 @@
 // Events the chat route streams to the browser, one JSON object per line.
-import type Anthropic from "@anthropic-ai/sdk";
+import type OpenAI from "openai";
 import type { CheckoutOrderView, QuoteResponse } from "@tokento/shared";
 import type { CatalogItem } from "../tokento";
+
+/** The conversation the model needs next turn, kept by the browser (append-only). */
+export type AgentHistory = OpenAI.Responses.ResponseInputItem[];
 
 export interface RewardSummary {
   rewardId: string;
@@ -24,5 +27,5 @@ export type UiEvent =
   | { type: "limits"; mandate: unknown }
   | { type: "notice"; text: string }
   | { type: "error"; message: string }
-  | { type: "history"; messages: Anthropic.Beta.BetaMessageParam[] }
+  | { type: "history"; messages: AgentHistory }
   | { type: "done"; stopReason: string };

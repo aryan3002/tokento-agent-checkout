@@ -1,9 +1,8 @@
 // Browser-side plumbing for the chat page: the saved conversation, one streamed
 // agent turn, and the round trip through PayPal's return and cancel pages.
 // No React here, so all of it runs under plain unit tests.
-import type Anthropic from "@anthropic-ai/sdk";
 import type { CheckoutOrderView } from "@tokento/shared";
-import type { UiEvent } from "../agent/events";
+import type { AgentHistory, UiEvent } from "../agent/events";
 import { readNdjson } from "./ndjson";
 import { emptyTranscript, type Transcript } from "./transcript";
 
@@ -17,7 +16,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TURN_FAILED: UiEvent = { type: "done", stopReason: "error" };
 
 export function transcriptKey(customerId: string): string {
-  return `tokento.shopper.chat.${customerId}`;
+  return `tokento.shopper.chat.v2.${customerId}`;
 }
 
 /** The shopper's saved chat. Storage can be blocked or hold junk; then the chat starts empty. */
@@ -45,7 +44,7 @@ export function saveTranscript(store: KeyValueStore | null | undefined, customer
 export async function* streamTurn(
   fetchImpl: Fetch,
   message: string,
-  history: Anthropic.Beta.BetaMessageParam[],
+  history: AgentHistory,
 ): AsyncGenerator<UiEvent> {
   let res: Response;
   try {

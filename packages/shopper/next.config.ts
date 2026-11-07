@@ -6,8 +6,8 @@ import type { NextConfig } from "next";
 loadEnv({ path: path.resolve(process.cwd(), "../../.env") });
 
 const nextConfig: NextConfig = {
-  // The Anthropic SDK and the session code only ever run on the server.
-  serverExternalPackages: ["@anthropic-ai/sdk"],
+  // The OpenAI SDK (for the Azure deployment) and the session code only ever run on the server.
+  serverExternalPackages: ["openai"],
 };
 
 export default nextConfig;

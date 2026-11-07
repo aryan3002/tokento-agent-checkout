@@ -1,137 +1,147 @@
-// The shopping agent's turn: stream Claude, run its tool calls against Tokento,
-// feed the results back, repeat until it answers (at most 8 tool rounds).
+// The shopping agent's turn on Azure OpenAI (Responses API): stream the model,
+// run its function calls against Tokento, feed the results back, repeat until
+// it answers (at most 8 tool rounds).
 //
-// The conversation is append-only: every assistant message goes back exactly as
-// Claude sent it, thinking blocks included, and the system prompt and tool list
-// never change, so the prompt cache and Claude's earlier reasoning stay valid.
-import Anthropic from "@anthropic-ai/sdk";
+// Nothing is stored on Azure's side (store: false). The browser keeps the
+// conversation and every output item goes back exactly as the model sent it,
+// reasoning included (encrypted), so the model keeps its earlier reasoning
+// across tool calls and turns.
+import type OpenAI from "openai";
 import type { TokentoClient } from "../tokento";
-import type { UiEvent } from "./events";
+import type { AgentHistory, UiEvent } from "./events";
 import { SYSTEM_PROMPT } from "./prompt";
 import { AGENT_TOOLS, runTool } from "./tools";
 
-export type { UiEvent } from "./events";
+export type { AgentHistory, UiEvent } from "./events";
 
-type BetaMessage = Anthropic.Beta.BetaMessage;
-type BetaMessageParam = Anthropic.Beta.BetaMessageParam;
-type BetaStreamEvent = Anthropic.Beta.BetaRawMessageStreamEvent;
-type BetaToolUseBlock = Anthropic.Beta.BetaToolUseBlock;
+type StreamParams = OpenAI.Responses.ResponseCreateParamsStreaming;
+type StreamEvent = OpenAI.Responses.ResponseStreamEvent;
+type ModelResponse = OpenAI.Responses.Response;
+type FunctionCall = OpenAI.Responses.ResponseFunctionToolCall;
 
-export interface StreamLike extends AsyncIterable<BetaStreamEvent> {
-  finalMessage(): Promise<BetaMessage>;
+/** The part of the OpenAI client the agent uses (a real `new OpenAI()` fits). */
+export interface ModelClient {
+  responses: { create(params: StreamParams): PromiseLike<AsyncIterable<StreamEvent>> };
 }
 
-type StreamParams = Parameters<Anthropic["beta"]["messages"]["stream"]>[0];
-
-/** The part of the Anthropic client the agent uses (a real `new Anthropic()` fits). */
-export interface ClaudeLike {
-  beta: { messages: { stream(params: StreamParams): StreamLike } };
+export interface AgentModelConfig {
+  /** The Azure deployment name (the `model` in each request). */
+  deployment: string;
+  /** null for deployments whose model doesn't reason (e.g. gpt-4.1). */
+  reasoningEffort: "minimal" | "low" | "medium" | "high" | null;
 }
 
-export const AGENT_MODEL = "claude-opus-5-5";
 const MAX_TOOL_ROUNDS = 8;
-const MAX_JSON_RETRIES = 2;
+const UNAVAILABLE = "The shopping assistant is unavailable right now. Please try again.";
 
-function requestParams(messages: BetaMessageParam[]): StreamParams {
+function requestParams(input: AgentHistory, config: AgentModelConfig): StreamParams {
   return {
-    model: AGENT_MODEL,
-    max_tokens: 32000,
-    // Refusal fallbacks re-run a declined request on another model server-side;
-    // "updates" returns Claude's short progress notes between tool calls.
-    betas: ["server-side-fallback-2026-07-01", "thinking-display-updates-2026-08-18"],
-    fallbacks: "default" as const,
-    thinking: { type: "adaptive" as const, display: "updates" as const },
-    output_config: { effort: "medium" as const },
-    cache_control: { type: "ephemeral" as const },
-    system: SYSTEM_PROMPT,
+    model: config.deployment,
+    instructions: SYSTEM_PROMPT,
+    input,
     tools: AGENT_TOOLS,
-    messages,
+    tool_choice: "auto",
+    parallel_tool_calls: true,
+    store: false,
+    stream: true,
+    max_output_tokens: 16000,
+    // Reasoning summaries become the short progress lines in the chat.
+    ...(config.reasoningEffort
+      ? { reasoning: { effort: config.reasoningEffort, summary: "auto" as const }, include: ["reasoning.encrypted_content" as const] }
+      : {}),
   };
 }
 
+/** The model's arguments are a JSON string; broken JSON reaches the tool's validation and fails there. */
+function parseArguments(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+}
+
 export async function* runAgentTurn(
-  deps: { claude: ClaudeLike; api: TokentoClient },
-  history: BetaMessageParam[],
+  deps: { model: ModelClient; config: AgentModelConfig; api: TokentoClient },
+  history: AgentHistory,
   userText: string,
   opts: { maxToolRounds?: number } = {},
 ): AsyncGenerator<UiEvent> {
   const maxRounds = opts.maxToolRounds ?? MAX_TOOL_ROUNDS;
-  const messages: BetaMessageParam[] = [...history, { role: "user", content: userText }];
+  const input: AgentHistory = [...history, { role: "user", content: userText }];
   let rounds = 0;
-  let jsonRetries = 0;
   let stopReason = "end_turn";
 
   while (true) {
-    let message: BetaMessage;
+    let response: ModelResponse | null = null;
+    let refused = false;
     try {
-      const stream = deps.claude.beta.messages.stream(requestParams(messages));
-      const thinking = new Map<number, string>();
+      const stream = await deps.model.responses.create(requestParams(input, deps.config));
       for await (const event of stream) {
-        if (event.type === "content_block_start" && event.content_block.type === "tool_use") {
-          yield { type: "tool_start", id: event.content_block.id, name: event.content_block.name };
-        } else if (event.type === "content_block_delta") {
-          if (event.delta.type === "text_delta") {
-            yield { type: "text", delta: event.delta.text };
-          } else if (event.delta.type === "thinking_delta") {
-            thinking.set(event.index, (thinking.get(event.index) ?? "") + event.delta.thinking);
+        switch (event.type) {
+          case "response.output_item.added":
+            if (event.item.type === "function_call") yield { type: "tool_start", id: event.item.call_id, name: event.item.name };
+            break;
+          case "response.output_text.delta":
+            yield { type: "text", delta: event.delta };
+            break;
+          case "response.reasoning_summary_text.done": {
+            const note = event.text.trim();
+            if (note) yield { type: "progress", text: note };
+            break;
           }
-        } else if (event.type === "content_block_stop") {
-          const note = thinking.get(event.index)?.trim();
-          if (note) yield { type: "progress", text: note };
-          thinking.delete(event.index);
+          case "response.refusal.delta":
+            refused = true;
+            break;
+          case "response.completed":
+          case "response.incomplete":
+          case "response.failed":
+            response = event.response;
+            break;
         }
       }
-      message = await stream.finalMessage();
-      jsonRetries = 0;
-    } catch (err) {
-      if (err instanceof Anthropic.APIError || jsonRetries >= MAX_JSON_RETRIES) {
-        yield { type: "error", message: "The shopping assistant is unavailable right now. Please try again." };
-        stopReason = "error";
-        break;
-      }
-      // A tool input that could not be parsed at all (eager input streaming): re-issue the turn.
-      jsonRetries += 1;
-      continue;
+    } catch {
+      response = null;
     }
 
-    const toolUses = message.content.filter((b): b is BetaToolUseBlock => b.type === "tool_use");
+    if (!response || response.status === "failed") {
+      yield { type: "error", message: UNAVAILABLE };
+      stopReason = "error";
+      break;
+    }
 
-    if (message.stop_reason === "refusal") {
-      // A refusal can cut a tool call off mid-input: never run it, and don't keep the partial reply.
+    const calls = response.output.filter((item): item is FunctionCall => item.type === "function_call");
+
+    if (refused) {
+      // Never run a tool from a reply the model refused, and don't keep that reply.
       yield { type: "notice", text: "I can't help with that one. Try asking a different way." };
       stopReason = "refusal";
       break;
     }
-    if (message.stop_reason === "max_tokens" && toolUses.length > 0) {
+    if (response.status === "incomplete" && calls.length > 0) {
       yield { type: "notice", text: "That got too long for me to finish. Try a simpler request." };
       stopReason = "max_tokens";
       break;
     }
 
-    messages.push({ role: "assistant", content: message.content });
+    // Output items are valid input items: the conversation goes back exactly as sent.
+    input.push(...(response.output as AgentHistory));
 
-    if (message.stop_reason === "pause_turn") continue;
-    if (message.stop_reason !== "tool_use" || toolUses.length === 0) {
-      stopReason = message.stop_reason ?? "end_turn";
+    if (calls.length === 0) {
+      stopReason = response.status === "incomplete" ? "max_tokens" : "end_turn";
       break;
     }
 
     rounds += 1;
-    const outcomes = await Promise.all(toolUses.map((block) => runTool(block.name, block.input, { api: deps.api, toolUseId: block.id })));
-    for (const [i, block] of toolUses.entries()) {
-      yield { type: "tool_result", id: block.id, name: block.name, ok: !outcomes[i].isError };
+    const outcomes = await Promise.all(
+      calls.map((call) => runTool(call.name, parseArguments(call.arguments), { api: deps.api, toolUseId: call.call_id })),
+    );
+    for (const [i, call] of calls.entries()) {
+      yield { type: "tool_result", id: call.call_id, name: call.name, ok: !outcomes[i].isError };
       const ui = outcomes[i].ui;
       if (ui) yield ui;
+      input.push({ type: "function_call_output", call_id: call.call_id, output: outcomes[i].content });
     }
-    messages.push({
-      role: "user",
-      content: toolUses.map((block, i) => ({
-        type: "tool_result" as const,
-        tool_use_id: block.id,
-        content: outcomes[i].content,
-        ...(outcomes[i].isError ? { is_error: true } : {}),
-      })),
-    });
 
     if (rounds >= maxRounds) {
       yield { type: "notice", text: `I stopped after ${maxRounds} steps. Tell me how you'd like to continue.` };
@@ -140,6 +150,6 @@ export async function* runAgentTurn(
     }
   }
 
-  yield { type: "history", messages };
+  yield { type: "history", messages: input };
   yield { type: "done", stopReason };
 }

@@ -2,7 +2,7 @@
   "name": "@tokento/shopper",
   "version": "0.1.0",
   "private": true,
-  "description": "Claude shopping agent that pays with PayPal through Tokento",
+  "description": "AI shopping agent (Azure OpenAI) that pays with PayPal through Tokento",
   "scripts": {
     "dev": "next dev --port 3200",
     "build": "next build",
@@ -12,11 +12,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^1.6.0",
     "@paypal/react-paypal-js": "^10.6.1",
     "@tokento/shared": "workspace:*",
     "dotenv": "^16.4.0",
     "next": "16.2.6",
+    "openai": "7.39.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "zod": "^4.1.12"

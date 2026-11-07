@@ -1,7 +1,6 @@
-// The shopping agent's instructions. Static on purpose: the system prompt is part
-// of the cached prefix, and editing it mid-conversation would also invalidate
-// earlier thinking blocks. Anything that changes (rewards, limits, orders) is
-// read through tools.
+// The shopping agent's instructions. Static on purpose: they open every request,
+// so an unchanged prefix keeps the prompt cache warm. Anything that changes
+// (rewards, limits, orders) is read through tools.
 import { SHOPPER_PROFILE } from "../profile";
 
 const p = SHOPPER_PROFILE;

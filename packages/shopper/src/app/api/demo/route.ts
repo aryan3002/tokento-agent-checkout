@@ -1,6 +1,7 @@
 // Starts (or resumes) the demo shopper's session.
 // Locally this is Maya's seeded wallet through a development session. The hosted
 // demo gives every visitor a fresh shopper of their own instead.
+import { readAgentConfig } from "@/lib/agent/azure";
 import { DEMO_CUSTOMER_ID, SHOPPER_PROFILE } from "@/lib/profile";
 import { readSession, writeSession } from "@/lib/session";
 
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
 function config() {
   return {
     paypalClientId: process.env.PAYPAL_CLIENT_ID || null,
-    agentConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
+    agentConfigured: readAgentConfig(process.env) !== null,
   };
 }
 

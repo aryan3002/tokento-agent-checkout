@@ -1,8 +1,7 @@
 // What the chat shows, built from the agent's event stream. Pure functions so
 // the UI state can be tested without a browser.
-import type Anthropic from "@anthropic-ai/sdk";
 import type { CheckoutOrderView, QuoteResponse } from "@tokento/shared";
-import type { RewardSummary, UiEvent } from "../agent/events";
+import type { AgentHistory, RewardSummary, UiEvent } from "../agent/events";
 
 export type Entry =
   | { kind: "user"; id: string; text: string }
@@ -16,8 +15,8 @@ export type Entry =
 
 export interface Transcript {
   entries: Entry[];
-  /** The conversation as Claude needs it next turn (append-only). */
-  history: Anthropic.Beta.BetaMessageParam[];
+  /** The conversation as the model needs it next turn (append-only). */
+  history: AgentHistory;
   busy: boolean;
 }
 

@@ -1,8 +1,8 @@
 // POST /api/chat — one turn of the shopping agent, streamed as NDJSON events.
 // The browser keeps the conversation and sends it back each turn; the server
 // appends to it and never edits earlier turns.
-import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import { createModelClient, readAgentConfig } from "@/lib/agent/azure";
 import { runAgentTurn } from "@/lib/agent/loop";
 import { readSession } from "@/lib/session";
 import { tokentoClient } from "@/lib/tokento";
@@ -20,7 +20,8 @@ export async function POST(request: Request) {
   if (!session) {
     return Response.json({ error: { code: "no_session", message: "Start a shopping session first." } }, { status: 401 });
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
+  const config = readAgentConfig(process.env);
+  if (!config) {
     return Response.json({ error: { code: "agent_not_configured", message: "The shopping agent is not configured on this server." } }, { status: 503 });
   }
   const parsed = Body.safeParse(await request.json().catch(() => null));
@@ -28,14 +29,14 @@ export async function POST(request: Request) {
     return Response.json({ error: { code: "invalid_request", message: "Send { message, history }." } }, { status: 400 });
   }
 
-  const claude = new Anthropic();
+  const model = createModelClient(config);
   const api = tokentoClient(session.token);
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        for await (const event of runAgentTurn({ claude, api }, parsed.data.history, parsed.data.message)) {
+        for await (const event of runAgentTurn({ model, config, api }, parsed.data.history, parsed.data.message)) {
           controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
         }
       } catch {
