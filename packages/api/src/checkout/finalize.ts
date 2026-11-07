@@ -31,7 +31,7 @@ export interface CaptureInfo {
 
 export type FinalizeSource = 'capture_response' | 'webhook' | 'sweeper';
 
-type AfterCommit = Array<() => void>;
+export type AfterCommit = Array<() => void>;
 
 const FINISHED: string[] = [CheckoutStatus.COMPLETED, CheckoutStatus.REFUNDED, CheckoutStatus.REFUND_PENDING, CheckoutStatus.NEEDS_REVIEW];
 const CLOSED_UNPAID: string[] = [CheckoutStatus.CANCELLED, CheckoutStatus.FAILED];

@@ -12,6 +12,7 @@ import { emitEvent } from '../events/emitter';
 import { logger } from '../utils/logger';
 import { checkoutService } from './checkout.service';
 import { finalizeCapture } from './finalize';
+import { applyRefund } from './refund';
 import { getPayPal } from './paypal';
 
 export interface PayPalWebhookEvent {
@@ -74,13 +75,42 @@ async function onOrderApproved(event: PayPalWebhookEvent): Promise<HandlerOutcom
   return { action: 'captured', checkoutId: order.id, merchantId: order.merchantId };
 }
 
-/** Event type → handler. Refund and Payouts handlers register themselves here. */
+/** The checkout a refund belongs to: our id in custom_id, else the capture it points `up` to. */
+async function orderForRefund(resource: Record<string, any> | undefined) {
+  const customId = typeof resource?.custom_id === 'string' && UUID.test(resource.custom_id) ? resource.custom_id : null;
+  if (customId) {
+    const byId = await prisma.checkoutOrder.findUnique({ where: { id: customId }, select: { id: true, merchantId: true } });
+    if (byId) return byId;
+  }
+  const up = Array.isArray(resource?.links) ? resource.links.find((l: { rel?: string }) => l?.rel === 'up') : null;
+  const captureId = typeof up?.href === 'string' ? up.href.split('/').pop() : null;
+  if (captureId) {
+    return prisma.checkoutOrder.findUnique({ where: { paypalCaptureId: captureId }, select: { id: true, merchantId: true } });
+  }
+  return null;
+}
+
+async function onRefundEvent(event: PayPalWebhookEvent): Promise<HandlerOutcome> {
+  const resource = event.resource ?? {};
+  const order = await orderForRefund(resource);
+  if (!order) return { action: 'unknown_order' };
+  await applyRefund(order.id, {
+    refundId: String(resource.id),
+    status: String(resource.status ?? 'COMPLETED'),
+    amount: String(resource.amount?.value ?? ''),
+  }, 'webhook');
+  return { action: 'refunded', checkoutId: order.id, merchantId: order.merchantId };
+}
+
+/** Event type → handler. Payouts handlers register themselves here. */
 export const webhookHandlers: Record<string, WebhookHandler> = {
   'CHECKOUT.ORDER.APPROVED': onOrderApproved,
   'PAYMENT.CAPTURE.COMPLETED': onCaptureEvent,
   'PAYMENT.CAPTURE.PENDING': onCaptureEvent,
   'PAYMENT.CAPTURE.DENIED': onCaptureEvent,
   'PAYMENT.CAPTURE.DECLINED': onCaptureEvent,
+  'PAYMENT.CAPTURE.REFUNDED': onRefundEvent,
+  'PAYMENT.CAPTURE.REVERSED': onRefundEvent,
 };
 
 function parseEvent(body: unknown): PayPalWebhookEvent | null {

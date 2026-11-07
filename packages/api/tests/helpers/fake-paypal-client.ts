@@ -26,6 +26,7 @@ export function createFakePayPal() {
   let captureStatus: PayPalCapture['status'] = 'COMPLETED';
   let capturedValueOverride: string | null = null;
   let signatureValid = true;
+  let refundStatus: PayPalRefund['status'] = 'COMPLETED';
 
   function record(method: string, args: unknown[]) {
     calls.push({ method, args });
@@ -114,7 +115,8 @@ export function createFakePayPal() {
       const prior = byRequestId.get(`refund:${opts.requestId}`);
       if (prior) return prior as PayPalRefund;
       seq += 1;
-      const refund: PayPalRefund = { id: `REFUND-${prefix}-${seq}`, status: 'COMPLETED' };
+      const captured = [...orders.values()].find((o) => o.capture?.id === captureId)?.capture?.amount.value ?? '0.00';
+      const refund: PayPalRefund = { id: `REFUND-${prefix}-${seq}`, status: refundStatus, amount: { currency_code: 'USD', value: input.amount ?? captured } };
       byRequestId.set(`refund:${opts.requestId}`, refund);
       return refund;
     },
@@ -171,9 +173,10 @@ export function createFakePayPal() {
     setCapturedValue(value: string | null) { capturedValueOverride = value; },
     /** What PayPal's verify-webhook-signature answers. */
     setSignatureValid(valid: boolean) { signatureValid = valid; },
+    setRefundStatus(status: PayPalRefund['status']) { refundStatus = status; },
     reset() {
       orders.clear(); byRequestId.clear(); calls.length = 0; failures.clear();
-      captureStatus = 'COMPLETED'; capturedValueOverride = null; signatureValid = true;
+      captureStatus = 'COMPLETED'; capturedValueOverride = null; signatureValid = true; refundStatus = 'COMPLETED';
     },
   };
 }

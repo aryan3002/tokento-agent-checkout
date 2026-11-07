@@ -150,6 +150,67 @@ export class TokenService {
   }
 
   /**
+   * Issue a fresh copy of a spent reward (used when the purchase it paid for is
+   * refunded). The original stays REDEEMED, so the redemption log is never
+   * rewritten. Same value and terms, a new id and signature; it keeps the
+   * original expiry, or gets 30 more days if that has passed. Idempotent on
+   * `idempotencyKey`.
+   */
+  async reissue(original: PrismaToken, opts: { idempotencyKey: string; isSandbox: boolean }): Promise<Token> {
+    const existing = await prisma.token.findUnique({
+      where: { idempotencyKey_merchantId: { idempotencyKey: opts.idempotencyKey, merchantId: original.merchantId } },
+    });
+    if (existing) return this.mapToken(existing);
+
+    const now = new Date();
+    const expiryAt = original.expiryAt > now ? original.expiryAt : new Date(now.getTime() + 30 * 86_400_000);
+    const tokenId = uuidv4();
+    const signature = signToken({
+      tokenId,
+      merchantId: original.merchantId,
+      customerId: original.customerId,
+      denomination: toMoneyNumber(original.denomination),
+      expiryAt: expiryAt.toISOString(),
+      isSandbox: opts.isSandbox,
+      minimumTransactionFloor: toMoneyNumber(original.minimumTransactionFloor),
+      agentPresentableFlag: original.agentPresentableFlag,
+    });
+
+    const token = await prisma.token.create({
+      data: {
+        id: tokenId,
+        merchantId: original.merchantId,
+        customerId: original.customerId,
+        earnRuleId: original.earnRuleId,
+        denomination: original.denomination,
+        tokenType: original.tokenType,
+        status: TokenStatus.ACTIVE,
+        signature,
+        idempotencyKey: opts.idempotencyKey,
+        categoryRestriction: original.categoryRestriction,
+        channelRestriction: original.channelRestriction,
+        stackabilityFlag: original.stackabilityFlag,
+        agentPresentableFlag: original.agentPresentableFlag,
+        minimumTransactionFloor: original.minimumTransactionFloor,
+        expiryAt,
+        isSandbox: opts.isSandbox,
+      },
+    });
+
+    await this.invalidateWalletCache(original.customerId);
+    emitEvent(EventType.TOKEN_MINTED, {
+      tokenId: token.id,
+      merchantId: token.merchantId,
+      customerId: token.customerId,
+      denomination: toMoneyNumber(token.denomination),
+      earnRuleId: token.earnRuleId,
+      reissuedFrom: original.id,
+    });
+    logger.info({ tokenId: token.id, reissuedFrom: original.id }, 'Reward reissued after refund');
+    return this.mapToken(token);
+  }
+
+  /**
    * Get a token by ID.
    */
   async getById(tokenId: string): Promise<ReturnType<typeof this.mapToken> | null> {
