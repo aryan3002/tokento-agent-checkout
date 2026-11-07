@@ -14,19 +14,9 @@ import {
   type ICellRendererParams,
   type ValueFormatterParams,
 } from "ag-grid-community";
-import type { CheckoutOrderView, PayPalEventView } from "@tokento/shared";
-import {
-  eventFromStream,
-  orderStats,
-  orderTotals,
-  prependEvent,
-  toOrderRow,
-  upsertById,
-  type AgentOrderRow,
-  type PayPalWebhookMessage,
-} from "./agent-orders";
+import type { CheckoutOrderView } from "@tokento/shared";
+import { orderStats, orderTotals, toOrderRow, upsertById, type AgentOrderRow } from "./agent-orders";
 import { ledgerTheme } from "./grid-theme";
-import { PayPalEventsFeed } from "./PayPalEventsFeed";
 
 export type StreamEvent = { type: string; payload: Record<string, unknown> };
 type Request = <T>(path: string, init?: RequestInit) => Promise<T>;
@@ -40,16 +30,33 @@ function apiErrorMessage(err: unknown): string {
   return /"message":"([^"]+)"/.exec(text)?.[1] ?? text;
 }
 
-function statusTone(status: AgentOrderRow["status"]): string {
-  if (status === "COMPLETED") return "text-success";
-  if (status === "FAILED" || status === "NEEDS_REVIEW") return "text-error";
-  if (status === "REFUNDED" || status === "CANCELLED") return "text-text-muted";
-  return "text-warning";
+function statusDot(status: AgentOrderRow["status"]): string {
+  if (status === "COMPLETED") return "dot-success";
+  if (status === "FAILED" || status === "NEEDS_REVIEW") return "dot-error";
+  if (status === "REFUNDED" || status === "CANCELLED") return "dot-neutral";
+  return "dot-warning pulse-dot";
 }
 
+// A dot plus the words, never colour alone.
 function StatusCell({ data, node }: ICellRendererParams<AgentOrderRow>) {
   if (!data || node.rowPinned) return null;
-  return <span className={`font-mono text-[11px] uppercase tracking-wider ${statusTone(data.status)}`}>{data.statusLabel}</span>;
+  return (
+    <span className="flex h-full items-center gap-2 text-[13px]">
+      <span className={`dot ${statusDot(data.status)}`} />
+      {data.statusLabel}
+    </span>
+  );
+}
+
+function ProductCell({ data, node }: ICellRendererParams<AgentOrderRow>) {
+  if (!data) return null;
+  if (node.rowPinned) return <span className="font-medium">{data.product}</span>;
+  return (
+    <span className="flex h-full min-w-0 flex-col justify-center leading-tight">
+      <span className="truncate">{data.quantity > 1 ? `${data.quantity} × ` : ""}{data.product}</span>
+      {data.agentReason && <span className="truncate text-xs text-text-muted">Why you: {data.agentReason}</span>}
+    </span>
+  );
 }
 
 function RefundCell({ data, node, onRefund }: ICellRendererParams<AgentOrderRow> & { onRefund: (id: string) => Promise<void> }) {
@@ -80,29 +87,25 @@ function RefundCell({ data, node, onRefund }: ICellRendererParams<AgentOrderRow>
       type="button"
       disabled={step === "working"}
       onClick={() => setStep("confirm")}
-      className="rounded-sm border border-border px-2 py-0.5 text-xs hover:border-border-hover disabled:opacity-50"
+      className="rounded-md border border-border bg-surface-1 px-2.5 py-1 text-xs font-medium hover:bg-surface-3 disabled:opacity-50"
     >
       {step === "working" ? "Refunding…" : "Refund"}
     </button>
   );
 }
 
-function StatTile({ folio, value, label }: { folio: string; value: string; label: string }) {
+function StatTile({ label, value, hint, tone = "" }: { label: string; value: string; hint: string; tone?: string }) {
   return (
-    <div className="glass p-5">
-      <span className="folio">{folio}</span>
-      <p className="tabular mt-3 text-3xl leading-none text-text-primary" style={{ fontFamily: "var(--font-display), Georgia, serif" }}>
-        {value}
-      </p>
-      <p className="mt-2 text-xs text-text-muted">{label}</p>
+    <div className="border-b border-border p-4 sm:border-r lg:border-b-0 [&:last-child]:border-r-0">
+      <p className="text-[13px] text-text-muted">{label}</p>
+      <p className={`tabular mt-1 font-mono text-2xl font-medium tracking-tight ${tone}`}>{value}</p>
+      <p className="mt-1.5 text-xs text-text-muted">{hint}</p>
     </div>
   );
 }
 
 export function AgentOrdersTab({ request, subscribe }: { request: Request; subscribe: Subscribe }) {
   const [orders, setOrders] = useState<CheckoutOrderView[] | null>(null);
-  const [events, setEvents] = useState<PayPalEventView[] | null>(null);
-  const [freshEventIds, setFreshEventIds] = useState<Set<string>>(() => new Set());
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -131,17 +134,6 @@ export function AgentOrdersTab({ request, subscribe }: { request: Request; subsc
     }
   }, []);
 
-  const markFresh = useCallback((id: string) => {
-    setFreshEventIds((prev) => new Set(prev).add(id));
-    setTimeout(() => {
-      setFreshEventIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    }, 1600);
-  }, []);
-
   useEffect(() => {
     let stale = false;
     request<{ orders: CheckoutOrderView[] }>("/api/v1/merchants/me/orders")
@@ -151,13 +143,6 @@ export function AgentOrdersTab({ request, subscribe }: { request: Request; subsc
       .catch(() => {
         if (!stale) setLoadError("Couldn't load agent orders. Check that the Tokento API is running.");
       });
-    request<{ events: PayPalEventView[] }>("/api/v1/merchants/me/paypal-events")
-      .then((res) => {
-        if (!stale) setEvents(res.events);
-      })
-      .catch(() => {
-        if (!stale) setEvents([]);
-      });
     return () => {
       stale = true;
     };
@@ -166,11 +151,6 @@ export function AgentOrdersTab({ request, subscribe }: { request: Request; subsc
   useEffect(
     () =>
       subscribe(({ type, payload }) => {
-        if (type === "paypal.webhook") {
-          const event = eventFromStream(payload as unknown as PayPalWebhookMessage, new Date().toISOString());
-          setEvents((prev) => prependEvent(prev ?? [], event, 50));
-          markFresh(event.id);
-        }
         const checkoutId = typeof payload.checkoutId === "string" ? payload.checkoutId : null;
         if (checkoutId && (type.startsWith("checkout.") || type === "paypal.webhook")) {
           request<CheckoutOrderView>(`/api/v1/merchants/me/orders/${encodeURIComponent(checkoutId)}`)
@@ -178,7 +158,7 @@ export function AgentOrdersTab({ request, subscribe }: { request: Request; subsc
             .catch(() => {});
         }
       }),
-    [subscribe, request, applyOrder, markFresh],
+    [subscribe, request, applyOrder],
   );
 
   const refund = useCallback(
@@ -197,8 +177,8 @@ export function AgentOrdersTab({ request, subscribe }: { request: Request; subsc
     () => [
       {
         field: "createdAt",
-        headerName: "Time",
-        width: 140,
+        headerName: "When",
+        width: 156,
         sort: "desc",
         cellClass: "tabular font-mono text-xs",
         valueFormatter: (p) =>
@@ -207,11 +187,12 @@ export function AgentOrdersTab({ request, subscribe }: { request: Request; subsc
       { field: "shopper", headerName: "Shopper", width: 104, cellClass: "font-mono text-xs" },
       {
         field: "product",
-        headerName: "Product",
+        headerName: "What they bought",
         flex: 1,
-        minWidth: 220,
+        minWidth: 260,
         filter: true,
-        tooltipValueGetter: (p) => (p.data?.agentReason ? `Why this store: ${p.data.agentReason}` : undefined),
+        cellRenderer: ProductCell,
+        tooltipValueGetter: (p) => (p.data?.agentReason ? `Why the agent chose you: ${p.data.agentReason}` : undefined),
       },
       { field: "subtotal", headerName: "Price", width: 96, type: "rightAligned", cellClass: "tabular", valueFormatter: money },
       {
@@ -219,22 +200,22 @@ export function AgentOrdersTab({ request, subscribe }: { request: Request; subsc
         headerName: "Reward used",
         width: 118,
         type: "rightAligned",
-        cellClass: "tabular text-brand-600",
+        cellClass: (p) => (typeof p.value === "number" ? "tabular text-warning" : "tabular text-text-muted"),
         valueFormatter: (p) => (typeof p.value === "number" ? `−${usd(p.value)}` : "—"),
       },
-      { field: "paid", headerName: "PayPal paid", width: 112, type: "rightAligned", cellClass: "tabular font-semibold", valueFormatter: money },
+      { field: "paid", headerName: "Paid via PayPal", width: 128, type: "rightAligned", cellClass: "tabular font-semibold", valueFormatter: money },
       {
         field: "earned",
         headerName: "Reward earned",
         width: 124,
         type: "rightAligned",
-        cellClass: "tabular text-success",
+        cellClass: (p) => (typeof p.value === "number" ? "tabular text-success" : "tabular text-text-muted"),
         valueFormatter: (p) => (typeof p.value === "number" ? `+${usd(p.value)}` : "—"),
       },
       { field: "paypalOrderId", headerName: "PayPal order", width: 158, cellClass: "font-mono text-[11px]", tooltipField: "paypalOrderId" },
       { field: "paypalCaptureId", headerName: "PayPal capture", width: 158, cellClass: "font-mono text-[11px]", tooltipField: "paypalCaptureId" },
-      { field: "statusLabel", headerName: "Status", width: 150, filter: true, pinned: "right", cellRenderer: StatusCell },
-      { field: "settlementLabel", headerName: "Settlement", width: 116 },
+      { field: "statusLabel", headerName: "Status", width: 168, filter: true, pinned: "right", cellRenderer: StatusCell },
+      { field: "settlementLabel", headerName: "Payout", width: 112 },
       { colId: "refund", headerName: "", width: 150, sortable: false, pinned: "right", cellRenderer: RefundCell, cellRendererParams: { onRefund: refund } },
     ],
     [refund],
@@ -256,19 +237,16 @@ export function AgentOrdersTab({ request, subscribe }: { request: Request; subsc
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <StatTile folio="A1" value={usd(stats.agentSales)} label={`Agent sales · ${stats.paidOrders} paid order${stats.paidOrders === 1 ? "" : "s"}`} />
-        <StatTile folio="A2" value={usd(stats.paidWithPayPal)} label="Paid through PayPal" />
-        <StatTile folio="A3" value={usd(stats.rewardsSpent)} label="Rewards shoppers spent here" />
-        <StatTile folio="A4" value={usd(stats.rewardsEarned)} label="Rewards earned for next time" />
-      </div>
+      <section aria-label="Agent orders in numbers" className="grid overflow-hidden rounded-xl border border-border bg-surface-1 sm:grid-cols-2 lg:grid-cols-4">
+        <StatTile label="Sales from AI agents" value={usd(stats.agentSales)} hint={`${stats.paidOrders} paid order${stats.paidOrders === 1 ? "" : "s"}, before rewards`} />
+        <StatTile label="Collected by PayPal" value={usd(stats.paidWithPayPal)} hint="What shoppers actually paid" />
+        <StatTile label="Rewards used here" value={`−${usd(stats.rewardsSpent)}`} hint="Discounts your rewards gave shoppers" tone="text-warning" />
+        <StatTile label="Rewards earned" value={`+${usd(stats.rewardsEarned)}`} hint="New rewards that bring shoppers back" tone="text-success" />
+      </section>
 
-      <section className="glass overflow-hidden">
-        <div className="flex flex-wrap items-baseline justify-between gap-2 px-5 pt-4 pb-3">
-          <div>
-            <p className="folio">Agent orders</p>
-            <p className="mt-1 text-xs text-text-muted">Purchases AI shopping agents made here, paid with PayPal. Updates live; hover a product for the agent&apos;s reason.</p>
-          </div>
+      <section className="overflow-hidden rounded-xl border border-border bg-surface-1">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+          <p className="text-[13px] text-text-muted">Newest first. Rows update the moment PayPal confirms a payment. Click a column to sort.</p>
           {loadError && <p className="text-xs text-error">{loadError}</p>}
           {actionError && <p className="text-xs text-error">{actionError}</p>}
         </div>
@@ -286,8 +264,6 @@ export function AgentOrdersTab({ request, subscribe }: { request: Request; subsc
           overlayNoRowsTemplate="<span>No agent orders yet. They appear here live when a shopping agent buys.</span>"
         />
       </section>
-
-      <PayPalEventsFeed events={events} freshIds={freshEventIds} />
     </div>
   );
 }

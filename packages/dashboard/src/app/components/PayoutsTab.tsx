@@ -15,7 +15,7 @@ type Subscribe = (listener: (event: StreamEvent) => void) => () => void;
 
 const usd = (v: number) => `$${v.toFixed(2)}`;
 const money = (p: ValueFormatterParams) => (typeof p.value === "number" ? usd(p.value) : "—");
-const TONE = { success: "text-success", warning: "text-warning", error: "text-error" } as const;
+const DOT = { success: "dot-success", warning: "dot-warning pulse-dot", error: "dot-error" } as const;
 
 function apiErrorMessage(err: unknown): string {
   const text = err instanceof Error ? err.message : String(err);
@@ -26,7 +26,8 @@ function StatusCell({ data }: ICellRendererParams<SettlementView>) {
   if (!data) return null;
   const s = payoutStatus(data.status);
   return (
-    <span title={data.error ?? undefined} className={`font-mono text-[11px] uppercase tracking-wider ${TONE[s.tone]}`}>
+    <span title={data.error ?? undefined} className="flex h-full items-center gap-2 text-[13px]">
+      <span className={`dot ${DOT[s.tone]}`} />
       {s.label}
     </span>
   );
@@ -91,8 +92,8 @@ export function PayoutsTab({ request, subscribe }: { request: Request; subscribe
     () => [
       {
         field: "createdAt",
-        headerName: "Time",
-        width: 150,
+        headerName: "When",
+        width: 140,
         sort: "desc",
         cellClass: "tabular font-mono text-xs",
         valueFormatter: (p) => (p.value ? new Date(p.value).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : ""),
@@ -120,12 +121,12 @@ export function PayoutsTab({ request, subscribe }: { request: Request; subscribe
     <div className="space-y-6">
       <section className="glass flex flex-wrap items-end justify-between gap-6 p-5">
         <div>
-          <p className="folio">Owed for agent sales</p>
+          <p className="text-[13px] text-text-muted">Owed to you for agent sales</p>
           {preview === null ? (
             <div className="skeleton mt-3 h-10 w-48" />
           ) : (
             <>
-              <p className="tabular mt-3 text-4xl leading-none" style={{ fontFamily: "var(--font-display), Georgia, serif" }}>
+              <p className="tabular mt-1 font-mono text-4xl font-medium tracking-tight">
                 {usd(Math.max(preview.net, 0))}
               </p>
               <p className="mt-2 text-sm text-text-secondary">{previewBreakdown(preview)}</p>
@@ -140,18 +141,19 @@ export function PayoutsTab({ request, subscribe }: { request: Request; subscribe
             type="button"
             disabled={busy || !preview?.payable}
             onClick={() => void settleNow()}
-            className="rounded-sm bg-text-primary px-4 py-2 text-sm font-medium text-surface-1 transition-opacity disabled:opacity-40"
+            className="rounded-md border border-text-primary bg-text-primary px-4 py-2 text-sm font-medium text-surface-0 transition-opacity hover:opacity-90 disabled:opacity-40"
           >
             {busy ? "Sending payout…" : "Settle now"}
           </button>
+          <p className="mt-2 max-w-xs text-xs text-text-muted">PayPal Payouts sends the money to your PayPal account, usually within a minute.</p>
           {error && <p className="mt-2 max-w-xs text-xs text-error">{error}</p>}
         </div>
       </section>
 
-      <section className="glass overflow-hidden">
-        <div className="px-5 pt-4 pb-3">
-          <p className="folio">Payouts</p>
-          <p className="mt-1 text-xs text-text-muted">One PayPal Payouts batch per settlement. Status updates from PayPal&apos;s verified payout webhooks.</p>
+      <section className="overflow-hidden rounded-xl border border-border bg-surface-1">
+        <div className="border-b border-border px-4 py-3">
+          <p className="text-sm font-medium">Past payouts</p>
+          <p className="mt-0.5 text-[13px] text-text-muted">Each Settle is one PayPal Payouts batch. Its status changes when PayPal confirms it.</p>
         </div>
         <AgGridReact<SettlementView>
           theme={ledgerTheme}

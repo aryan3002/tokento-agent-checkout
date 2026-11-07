@@ -3,7 +3,16 @@ import { useState, useEffect, useRef, useCallback, useMemo, FormEvent } from "re
 import { FirstRun } from "./components/FirstRun";
 import { AgentOrdersTab, type StreamEvent } from "./components/AgentOrdersTab";
 import { PayoutsTab } from "./components/PayoutsTab";
+import { PayPalEventsFeed } from "./components/PayPalEventsFeed";
+import { OverviewPage } from "./components/OverviewPage";
+import { Sidebar, type Page, type Theme } from "./components/Sidebar";
+import { useStoreActivity } from "./components/useStoreActivity";
 import { overviewStats } from "./components/overview";
+
+// Where "Try it as a shopper" goes: the hosted shopper app, or the local one in development.
+const SHOPPER_URL = process.env.NEXT_PUBLIC_SHOPPER_URL || "http://localhost:3200";
+const THEME_KEY = "tokento.theme";
+const SIDEBAR_KEY = "tokento.sidebar.collapsed";
 
 // All API traffic goes through the same-origin server proxy at /api/proxy, which
 // attaches the merchant API key server-side. No credential is shipped to the browser.
@@ -101,29 +110,27 @@ type WebhookDelivery = {
   createdAt: string;
 };
 
-type Tab = "overview" | "agent-orders" | "payouts" | "tokens" | "rules" | "redemptions" | "webhooks" | "settings" | "demo" | "status";
-
 type ConnectionState = "connecting" | "live" | "down";
 type LoginStatus = "idle" | "sending" | "sent" | "error";
 
-const TAB_DEFS: { key: Tab; label: string; icon: string }[] = [
-  { key: "overview", label: "Overview", icon: "01" },
-  { key: "agent-orders", label: "Agent Orders", icon: "02" },
-  { key: "payouts", label: "Payouts", icon: "03" },
-  { key: "tokens", label: "Tokens", icon: "04" },
-  { key: "rules", label: "Earn Rules", icon: "05" },
-  { key: "redemptions", label: "Redemptions", icon: "06" },
-  { key: "webhooks", label: "Webhooks", icon: "07" },
-  { key: "settings", label: "Settings", icon: "08" },
-  { key: "demo", label: "Demo Wiring", icon: "09" },
-  { key: "status", label: "System Status", icon: "10" },
-];
+/** Each page's name in the breadcrumb and the one sentence under its title. */
+const PAGES: Record<Page, { title: string; about: string }> = {
+  overview: { title: "Overview", about: "" },
+  "agent-orders": { title: "Agent orders", about: "Every purchase an AI shopping agent made here, paid with PayPal. Updates live." },
+  payouts: { title: "Payouts", about: "What you are owed for agent sales. Settle sends it to your PayPal account with PayPal Payouts." },
+  rewards: { title: "Rewards", about: "The rewards you give shoppers, the rules that earn them, and when shoppers spend them." },
+  "paypal-events": { title: "PayPal activity", about: "Messages from PayPal about your orders. Tokento checks each one with PayPal before acting on it." },
+  connect: { title: "Connect an agent", about: "How AI agents find your rewards: the Tokento wallet API and the MCP tools." },
+  webhooks: { title: "Webhooks", about: "Send your own systems a message when a reward is issued, spent or expires." },
+  status: { title: "System status", about: "Whether the services behind this dashboard are up." },
+  settings: { title: "Settings", about: "Your store's settings and sign-in." },
+};
 
+/** What the System status page checks: the API's own health check reports its database and cache. */
 const SERVICES = [
-  { name: "API Server", url: `${API_BASE}/health`, port: 4000 },
-  { name: "MCP Adapter", url: "http://localhost:8787", port: 8787 },
-  { name: "PostgreSQL", url: null, port: 5434 },
-  { name: "Redis", url: null, port: 6379 },
+  { name: "Tokento API", key: "api", detail: "Answers this dashboard and the shopper app" },
+  { name: "Database", key: "database", detail: "Postgres: orders, rewards and payouts" },
+  { name: "Cache", key: "cache", detail: "Redis: wallet lookups and rate limits" },
 ];
 
 function buildAuthHeaders(init: RequestInit, sessionJwt: string | null): Headers {
@@ -182,7 +189,10 @@ async function api<T = unknown>(path: string, init: RequestInit = {}): Promise<T
 }
 
 export default function Dashboard() {
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Page>("overview");
+  const [theme, setTheme] = useState<Theme>("system");
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [b2bSessionJwt, setB2BSessionJwtState] = useState<string | null>(() => getB2BSessionJwt());
   const [sessionInput, setSessionInput] = useState("");
   const [authWarning, setAuthWarning] = useState<string | null>(null);
@@ -455,24 +465,58 @@ export default function Dashboard() {
     };
   }, [b2bSessionJwt, refreshWebhookData]);
 
+  // The API's /health checks its own database and cache, so one call answers all three rows.
   const checkServices = async () => {
-    for (const svc of SERVICES) {
-      setServiceStatus((s) => ({ ...s, [svc.name]: "checking" }));
-      try {
-        const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), 2500);
-        if (svc.url) {
-          await fetch(svc.url, { signal: ctrl.signal });
-        } else {
-          await fetch(`http://localhost:${svc.port}`, { signal: ctrl.signal, mode: "no-cors" });
-        }
-        clearTimeout(t);
-        setServiceStatus((s) => ({ ...s, [svc.name]: "up" }));
-      } catch {
-        setServiceStatus((s) => ({ ...s, [svc.name]: "down" }));
-      }
+    setServiceStatus({ api: "checking", database: "checking", cache: "checking" });
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 4000);
+      const res = await fetch(`${API_BASE}/health`, { signal: ctrl.signal, cache: "no-store" });
+      clearTimeout(t);
+      const body = (await res.json().catch(() => null)) as { checks?: { database?: boolean; cache?: boolean } } | null;
+      setServiceStatus({
+        api: body ? "up" : "down",
+        database: body?.checks?.database ? "up" : "down",
+        cache: body?.checks?.cache ? "up" : "down",
+      });
+    } catch {
+      setServiceStatus({ api: "down", database: "down", cache: "down" });
     }
   };
+
+  const activity = useStoreActivity(api, subscribeStream);
+
+  // Theme and sidebar width are per-browser conveniences; the theme script in the layout applied the theme already.
+  useEffect(() => {
+    void Promise.resolve().then(() => {
+      const saved = document.documentElement.dataset.theme;
+      if (saved === "light" || saved === "dark") setTheme(saved);
+      try { setCollapsed(localStorage.getItem(SIDEBAR_KEY) === "1"); } catch { /* storage blocked: default width */ }
+    });
+  }, []);
+
+  const applyTheme = useCallback((next: Theme) => {
+    setTheme(next);
+    const root = document.documentElement;
+    if (next === "system") delete root.dataset.theme;
+    else root.dataset.theme = next;
+    try {
+      if (next === "system") localStorage.removeItem(THEME_KEY);
+      else localStorage.setItem(THEME_KEY, next);
+    } catch { /* storage blocked: the choice lasts this visit */ }
+  }, []);
+
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed((prev) => {
+      try { localStorage.setItem(SIDEBAR_KEY, prev ? "0" : "1"); } catch { /* per visit */ }
+      return !prev;
+    });
+  }, []);
+
+  const selectPage = useCallback((next: Page) => {
+    setTab(next);
+    if (next === "status") void checkServices();
+  }, []);
 
   // An agent has been seen if one validated a token this session, or if any past
   // redemption was attributed to an agent.
@@ -490,280 +534,196 @@ export default function Dashboard() {
 
   const stats = useMemo(() => overviewStats(tokens, redemptions), [tokens, redemptions]);
 
-  return (
-    <div className="flex min-h-screen">
-      <aside className="w-64 border-r border-border bg-surface-1 flex flex-col shrink-0">
-        <div className="p-6 border-b border-border">
-          <h1 className="text-xl font-bold gradient-text">◆ Tokento</h1>
-          <p className="text-xs text-text-muted mt-1">Merchant Dashboard</p>
-        </div>
-        <nav className="flex-1 p-3 space-y-1">
-          {TAB_DEFS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => {
-                setTab(t.key);
-                if (t.key === "status") checkServices();
-              }}
-              className={`group relative w-full flex items-center gap-3 px-3 py-2.5 text-sm transition-colors duration-150 ${
-                tab === t.key
-                  ? "text-text-primary"
-                  : "text-text-secondary hover:text-text-primary"
-              }`}
-            >
-              {/* Active item is marked by an ink rule in the gutter. */}
-              <span
-                aria-hidden
-                className={`absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 bg-brand-500 transition-opacity ${
-                  tab === t.key ? "opacity-100" : "opacity-0"
-                }`}
-              />
-              <span
-                aria-hidden
-                className={`font-mono text-[10px] tracking-[0.12em] ${
-                  tab === t.key ? "text-brand-500" : "text-text-muted"
-                }`}
-              >
-                {t.icon}
-              </span>
-              {t.label}
-            </button>
-          ))}
-        </nav>
-        <div className="p-4 border-t border-border space-y-3">
-          <ConnectionPill state={connection} lastEventAt={lastEventAt} />
-          <div className="glass rounded-lg p-3">
-            <p className="text-xs text-text-muted">Merchant</p>
-            <p className="text-sm font-semibold truncate">{merchant?.name || "Loading..."}</p>
-            <p className="text-xs text-text-muted truncate">{merchant?.email || "—"}</p>
-          </div>
-        </div>
-      </aside>
+  const ordersCount = activity.orders?.length ?? null;
+  const owedNet = activity.owed?.net ?? 0;
+  const live = connection === "live";
 
-      <main className="flex-1 overflow-y-auto">
-        <header className="sticky top-0 z-10 glass border-b border-border px-8 py-4 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">
-              {TAB_DEFS.find((t) => t.key === tab)?.label}
-            </h2>
-            <p className="text-xs text-text-muted">Sandbox environment · Live via SSE</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-warning/10 text-warning">
-              <span className="w-1.5 h-1.5 rounded-full bg-warning pulse-dot" />
-              Sandbox
+  return (
+    <div className="flex min-h-screen bg-surface-0">
+      <Sidebar
+        page={tab}
+        onSelect={selectPage}
+        storeName={merchant?.name || "Your store"}
+        ordersCount={ordersCount}
+        owedLabel={owedNet > 0 ? `$${owedNet.toFixed(2)}` : null}
+        eventsCount={activity.events?.length ?? null}
+        connection={connection}
+        collapsed={collapsed}
+        onToggleCollapsed={toggleCollapsed}
+        theme={theme}
+        onTheme={applyTheme}
+        mobileOpen={mobileOpen}
+        onCloseMobile={() => setMobileOpen(false)}
+      />
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-20 flex items-center gap-2 border-b border-border bg-surface-0/90 px-4 py-2.5 backdrop-blur md:px-6">
+          <button type="button" onClick={() => setMobileOpen(true)} aria-label="Open menu" className="rounded-md border border-border p-1.5 text-text-muted md:hidden">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+          </button>
+          <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-2 text-sm">
+            <button type="button" onClick={() => selectPage("overview")} className="truncate text-text-muted hover:text-text-primary">{merchant?.name || "Your store"}</button>
+            <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden className="flex-none text-border-hover"><path d="M15 4 9 20" stroke="currentColor" strokeWidth="1.6" /></svg>
+            <span aria-current="page" className="truncate font-medium">{PAGES[tab].title}</span>
+          </nav>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="hidden items-center gap-1.5 text-[13px] text-text-muted sm:flex" title={lastEventAt ? `Last update ${new Date(lastEventAt).toLocaleTimeString()}` : undefined}>
+              <span className={`dot ${live ? "dot-success pulse-dot" : connection === "down" ? "dot-error" : "dot-warning"}`} />
+              {live ? "Live" : connection === "down" ? "Reconnecting…" : "Connecting…"}
             </span>
+            <a href={SHOPPER_URL} target="_blank" rel="noreferrer" className="hidden rounded-md border border-border px-2.5 py-1 text-[13px] font-medium hover:bg-surface-3 sm:inline-flex">Shopper app ↗</a>
+            <a href="https://github.com/aryan3002/tokento-agent-checkout#readme" target="_blank" rel="noreferrer" className="rounded-md border border-border px-2.5 py-1 text-[13px] font-medium hover:bg-surface-3">Docs</a>
           </div>
         </header>
 
-        <div className="p-8">
-          {tab === "overview" && (
-            isFirstRun ? (
-              /* A new merchant gets the path to their first redemption, not empty tables. */
-              <FirstRun
-                facts={{
-                  hasEarnRule: earnRules.length > 0,
-                  hasToken: tokens.length > 0,
-                  hasAgentConnected: agentHasQueried,
-                  hasRedemption: redemptions.length > 0,
-                }}
-                merchantName={merchant?.name}
-                onGoToRules={() => setTab("rules")}
-                onGoToDemo={() => setTab("demo")}
-              />
-            ) : (
-              <OverviewTab
-                stats={stats}
-                recentTokens={tokens.slice(0, 5)}
-                recentRedemptions={redemptions.slice(0, 5)}
-                earnRuleNameById={earnRuleNameById}
-                flashTokenId={flashTokenId}
-              />
-            )
+        <main className="flex-1 px-4 py-7 md:px-8">
+          {tab === "overview" ? (
+            <OverviewPage activity={activity} storeName={merchant?.name || "your store"} shopperUrl={SHOPPER_URL} onNavigate={selectPage} />
+          ) : (
+            <div className="mx-auto w-full max-w-[1160px]">
+              <div className="mb-6">
+                <h1 className="text-2xl font-semibold tracking-tight">{PAGES[tab].title}</h1>
+                <p className="mt-1 text-sm text-text-muted">{PAGES[tab].about}</p>
+              </div>
+              {tab === "agent-orders" && <AgentOrdersTab request={api} subscribe={subscribeStream} />}
+              {tab === "payouts" && <PayoutsTab request={api} subscribe={subscribeStream} />}
+              {tab === "rewards" && (
+                <RewardsPage
+                  stats={stats}
+                  tokens={tokens}
+                  earnRules={earnRules}
+                  redemptions={redemptions}
+                  earnRuleNameById={earnRuleNameById}
+                  flashTokenId={flashTokenId}
+                  onRulesChanged={refreshAll}
+                />
+              )}
+              {tab === "paypal-events" && <PayPalEventsFeed events={activity.events} freshIds={activity.freshEventIds} />}
+              {tab === "connect" && (
+                <div className="space-y-6">
+                  {isFirstRun && (
+                    <FirstRun
+                      facts={{
+                        hasEarnRule: earnRules.length > 0,
+                        hasToken: tokens.length > 0,
+                        hasAgentConnected: agentHasQueried,
+                        hasRedemption: redemptions.length > 0,
+                      }}
+                      merchantName={merchant?.name}
+                      onGoToRules={() => selectPage("rewards")}
+                      onGoToDemo={() => selectPage("connect")}
+                    />
+                  )}
+                  <DemoTab merchant={merchant} />
+                </div>
+              )}
+              {tab === "webhooks" && (
+                <WebhooksTab endpoints={webhookEndpoints} deliveries={webhookDeliveries} onChanged={refreshWebhookData} />
+              )}
+              {tab === "settings" && merchant && (
+                <SettingsTab
+                  key={merchant.id}
+                  merchant={merchant}
+                  b2bSessionJwt={b2bSessionJwt}
+                  loginEmail={loginEmail}
+                  loginStatus={loginStatus}
+                  loginMessage={loginMessage}
+                  defaultLoginEmail={defaultLoginEmail}
+                  setLoginEmail={setLoginEmail}
+                  onMagicLinkSend={sendB2BMagicLink}
+                  sessionInput={sessionInput}
+                  setSessionInput={setSessionInput}
+                  authWarning={authWarning}
+                  onSessionSave={() => {
+                    const trimmed = sessionInput.trim();
+                    if (!trimmed) return;
+                    updateSessionJwt(trimmed);
+                    setSessionInput("");
+                    setAuthWarning(null);
+                    refreshAll();
+                  }}
+                  onSessionClear={() => {
+                    updateSessionJwt(null);
+                    setAuthWarning("B2B session cleared. Dashboard will fall back to API key auth.");
+                    refreshAll();
+                  }}
+                  onSaved={refreshAll}
+                />
+              )}
+              {tab === "status" && (
+                <StatusTab services={SERVICES} status={serviceStatus} onCheck={checkServices} connection={connection} />
+              )}
+            </div>
           )}
-          {tab === "agent-orders" && <AgentOrdersTab request={api} subscribe={subscribeStream} />}
-          {tab === "payouts" && <PayoutsTab request={api} subscribe={subscribeStream} />}
-          {tab === "tokens" && (
-            <TokensTab tokens={tokens} earnRuleNameById={earnRuleNameById} flashTokenId={flashTokenId} />
-          )}
-          {tab === "rules" && <EarnRulesTab rules={earnRules} onCreated={refreshAll} />}
-          {tab === "redemptions" && <RedemptionsTab redemptions={redemptions} />}
-          {tab === "webhooks" && (
-            <WebhooksTab
-              endpoints={webhookEndpoints}
-              deliveries={webhookDeliveries}
-              onChanged={refreshWebhookData}
-            />
-          )}
-          {tab === "settings" && merchant && (
-            <SettingsTab
-              key={merchant.id}
-              merchant={merchant}
-              b2bSessionJwt={b2bSessionJwt}
-              loginEmail={loginEmail}
-              loginStatus={loginStatus}
-              loginMessage={loginMessage}
-              defaultLoginEmail={defaultLoginEmail}
-              setLoginEmail={setLoginEmail}
-              onMagicLinkSend={sendB2BMagicLink}
-              sessionInput={sessionInput}
-              setSessionInput={setSessionInput}
-              authWarning={authWarning}
-              onSessionSave={() => {
-                const trimmed = sessionInput.trim();
-                if (!trimmed) return;
-                updateSessionJwt(trimmed);
-                setSessionInput("");
-                setAuthWarning(null);
-                refreshAll();
-              }}
-              onSessionClear={() => {
-                updateSessionJwt(null);
-                setAuthWarning("B2B session cleared. Dashboard will fall back to API key auth.");
-                refreshAll();
-              }}
-              onSaved={refreshAll}
-            />
-          )}
-          {tab === "demo" && <DemoTab merchant={merchant} />}
-          {tab === "status" && (
-            <StatusTab services={SERVICES} status={serviceStatus} onCheck={checkServices} connection={connection} />
-          )}
-        </div>
-      </main>
-    </div>
-  );
-}
-
-/* ---- Connection pill ---- */
-function ConnectionPill({ state, lastEventAt }: { state: ConnectionState; lastEventAt: string | null }) {
-  const cfg = {
-    connecting: { dot: "bg-warning", text: "text-warning", label: "Connecting…" },
-    live: { dot: "bg-success", text: "text-success", label: "Live" },
-    down: { dot: "bg-error", text: "text-error", label: "Reconnecting…" },
-  }[state];
-  return (
-    <div className="glass rounded-lg p-3">
-      <div className="flex items-center gap-2">
-        <span className={`w-2 h-2 rounded-full ${cfg.dot} ${state === "live" ? "pulse-dot" : ""}`} />
-        <span className={`text-xs font-medium ${cfg.text}`}>{cfg.label}</span>
+        </main>
       </div>
-      {lastEventAt && (
-        <p className="text-[10px] text-text-muted mt-1">Last event: {new Date(lastEventAt).toLocaleTimeString()}</p>
-      )}
     </div>
   );
 }
 
-/* ---- Stat Card ---- */
-function StatCard({ label, value, icon }: { label: string; value: string | number; icon: string }) {
-  return (
-    <div className="glass p-5 transition-colors hover:border-border-hover">
-      {/* Folio numeral in the gutter, then the figure at scale. Ledger figures are
-          tabular so columns align down the page. */}
-      <span className="folio">{icon}</span>
-      <p className="tabular mt-3 text-3xl leading-none text-text-primary" style={{ fontFamily: "var(--font-display), Georgia, serif" }}>
-        {value}
-      </p>
-      <p className="mt-2 text-xs text-text-muted">{label}</p>
-    </div>
-  );
-}
+/* ---- Rewards: what shoppers hold, the rules that earn them, and when they are spent ---- */
+type RewardsView = "issued" | "rules" | "redemptions";
 
-/* ---- Overview ---- */
-function OverviewTab({
+function RewardsPage({
   stats,
-  recentTokens,
-  recentRedemptions,
+  tokens,
+  earnRules,
+  redemptions,
   earnRuleNameById,
   flashTokenId,
+  onRulesChanged,
 }: {
   stats: { tokensIssued: number; activeTokens: number; redemptions: number; totalValue: number };
-  recentTokens: Token[];
-  recentRedemptions: Redemption[];
+  tokens: Token[];
+  earnRules: EarnRule[];
+  redemptions: Redemption[];
   earnRuleNameById: Map<string, string>;
   flashTokenId: string | null;
+  onRulesChanged: () => void;
 }) {
+  const [view, setView] = useState<RewardsView>("issued");
+  const views: { key: RewardsView; label: string }[] = [
+    { key: "issued", label: `Given out (${tokens.length})` },
+    { key: "rules", label: `Earn rules (${earnRules.length})` },
+    { key: "redemptions", label: `Spent (${redemptions.length})` },
+  ];
   return (
-    <div className="space-y-8 stagger-children">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon="01" label="Tokens Issued" value={stats.tokensIssued} />
-        <StatCard icon="02" label="Active Tokens" value={stats.activeTokens} />
-        <StatCard icon="03" label="Redemptions" value={stats.redemptions} />
-        <StatCard icon="04" label="Total Value" value={`$${stats.totalValue.toFixed(2)}`} />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="glass rounded-xl p-5">
-          <h3 className="font-semibold mb-4">Recent Tokens</h3>
-          <div className="space-y-3">
-            {recentTokens.length === 0 && <p className="text-sm text-text-muted">No tokens yet. Run <code className="bg-surface-3 px-1 rounded">pnpm db:seed</code> to populate.</p>}
-            {recentTokens.map((t) => (
-              <div
-                key={t.id}
-                className={`flex items-center justify-between py-2 border-b border-border last:border-0 transition-colors ${
-                  flashTokenId === t.id ? "bg-brand-500/10" : ""
-                }`}
-              >
-                <div>
-                  <p className="text-sm font-medium font-mono">{t.id.slice(0, 8)}…</p>
-                  <p className="text-xs text-text-muted">{earnRuleNameById.get(t.earnRuleId) || t.earnRuleId.slice(0, 8)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold">${t.denomination}</p>
-                  <StatusBadge status={t.status} justChanged={flashTokenId === t.id} />
-                </div>
-              </div>
-            ))}
+    <div className="space-y-6">
+      <section aria-label="Rewards in numbers" className="grid overflow-hidden rounded-xl border border-border bg-surface-1 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          ["Rewards given out", String(stats.tokensIssued), "Every reward your store has issued"],
+          ["Still unused", String(stats.activeTokens), "Rewards shoppers can still spend with you"],
+          ["Spent by shoppers", String(stats.redemptions), "Times a reward was used at checkout"],
+          ["Total value issued", `$${stats.totalValue.toFixed(2)}`, "Face value of all rewards given out"],
+        ].map(([label, value, hint]) => (
+          <div key={label} className="border-b border-border p-4 sm:border-r lg:border-b-0 [&:last-child]:border-r-0">
+            <p className="text-[13px] text-text-muted">{label}</p>
+            <p className="tabular mt-1 font-mono text-2xl font-medium tracking-tight">{value}</p>
+            <p className="mt-1.5 text-xs text-text-muted">{hint}</p>
           </div>
-        </div>
-
-        <div className="glass rounded-xl p-5">
-          <h3 className="font-semibold mb-4">Recent Redemptions</h3>
-          <div className="space-y-3">
-            {recentRedemptions.length === 0 && <p className="text-sm text-text-muted">No redemptions yet. Ask Claude to redeem a token to see this update live.</p>}
-            {recentRedemptions.map((r) => (
-              <div key={r.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                <div>
-                  <p className="text-sm font-medium">{r.agentId || "MCP Adapter"}</p>
-                  <p className="text-xs text-text-muted">{new Date(r.redeemedAt).toLocaleString()}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-success">-${r.tokenDenomination}</p>
-                  <p className="text-xs text-text-muted">Net: ${r.netValue}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        ))}
+      </section>
+      <div role="tablist" aria-label="Rewards views" className="inline-flex rounded-md border border-border bg-surface-1 p-0.5">
+        {views.map((v) => (
+          <button
+            key={v.key}
+            role="tab"
+            type="button"
+            aria-selected={view === v.key}
+            onClick={() => setView(v.key)}
+            className={`rounded px-3 py-1 text-sm ${view === v.key ? "bg-surface-3 font-medium text-text-primary" : "text-text-muted hover:text-text-primary"}`}
+          >
+            {v.label}
+          </button>
+        ))}
       </div>
-
-      <div className="glass rounded-xl p-6 glow">
-        <div className="flex items-start gap-4">
-          <div className="folio shrink-0 pt-1">TQI</div>
-          <div>
-            <h3 className="font-semibold text-lg">MCP Agent Integration Active</h3>
-            <p className="text-sm text-text-secondary mt-1">
-              AI agents can discover and use your loyalty tokens via the Token Query Interface. 3 tools available:{" "}
-              <code className="text-xs bg-surface-3 px-1.5 py-0.5 rounded font-mono">query_loyalty_tokens</code>,{" "}
-              <code className="text-xs bg-surface-3 px-1.5 py-0.5 rounded font-mono">validate_token</code>,{" "}
-              <code className="text-xs bg-surface-3 px-1.5 py-0.5 rounded font-mono">redeem_token</code>
-            </p>
-            <div className="flex items-center gap-2 mt-3">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-success/10 text-success">
-                <span className="w-1.5 h-1.5 rounded-full bg-success pulse-dot" />
-                MCP Server Live
-              </span>
-              <span className="text-xs text-text-muted">localhost:8787</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      {view === "issued" && <TokensTab tokens={tokens} earnRuleNameById={earnRuleNameById} flashTokenId={flashTokenId} />}
+      {view === "rules" && <EarnRulesTab rules={earnRules} onCreated={onRulesChanged} />}
+      {view === "redemptions" && <RedemptionsTab redemptions={redemptions} />}
     </div>
   );
 }
 
-/* ---- Tokens ---- */
 function TokensTab({
   tokens,
   earnRuleNameById,
@@ -1454,24 +1414,24 @@ function StatusTab({
         </div>
       </div>
       <div className="flex items-center justify-between">
-        <p className="text-sm text-text-secondary">Check which services are running locally</p>
-        <button onClick={onCheck} className="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium transition-colors">
-          Check All
+        <p className="text-sm text-text-secondary">The API checks its database and cache when you ask.</p>
+        <button onClick={onCheck} className="rounded-md border border-text-primary bg-text-primary px-3.5 py-1.5 text-sm font-medium text-surface-0 hover:opacity-90">
+          Check again
         </button>
       </div>
       <div className="space-y-3">
         {services.map((svc) => (
-          <div key={svc.name} className="glass rounded-xl p-5 flex items-center justify-between">
+          <div key={svc.key} className="glass rounded-xl p-5 flex items-center justify-between">
             <div>
               <p className="font-semibold">{svc.name}</p>
-              <p className="text-xs text-text-muted font-mono">localhost:{svc.port}</p>
+              <p className="text-xs text-text-muted">{svc.detail}</p>
             </div>
-            <StatusDot status={status[svc.name]} />
+            <StatusDot status={status[svc.key]} />
           </div>
         ))}
       </div>
       <div className="glass rounded-xl p-5">
-        <h4 className="font-semibold mb-2">Quick Test — MCP Tools</h4>
+        <h4 className="font-semibold mb-2">For local development: list the MCP tools</h4>
         <code className="block bg-surface-3 rounded-lg p-4 text-xs font-mono text-text-secondary overflow-x-auto whitespace-pre">{`curl -X POST http://localhost:8787 \\
   -H "Content-Type: application/json" \\
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'`}</code>

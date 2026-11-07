@@ -1,26 +1,35 @@
-// AG Grid setup shared by the dashboard's grids: modules and the ledger theme.
+// AG Grid setup shared by the dashboard's grids: modules and the theme.
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from "ag-grid-community";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-// The dashboard's ledger palette: paper, ink, one terracotta accent.
+// Reads the dashboard's CSS variables, so the grids follow the light/dark switch.
 export const ledgerTheme = themeQuartz.withParams({
-  browserColorScheme: "light",
-  backgroundColor: "#faf7f0",
-  foregroundColor: "#0f0f0e",
-  borderColor: "#d6cfbf",
-  accentColor: "#b85042",
-  headerBackgroundColor: "#efe9dc",
-  headerTextColor: "#6b6759",
-  oddRowBackgroundColor: "#f5f1e8",
-  rowHoverColor: "#efe9dc",
-  pinnedRowBackgroundColor: "#efe9dc",
+  browserColorScheme: "inherit",
+  backgroundColor: "var(--surface-1)",
+  foregroundColor: "var(--text-primary)",
+  textColor: "var(--text-primary)",
+  subtleTextColor: "var(--text-muted)",
+  borderColor: "var(--border)",
+  accentColor: "var(--brand-500)",
+  headerBackgroundColor: "var(--surface-2)",
+  headerTextColor: "var(--text-muted)",
+  headerFontWeight: 500,
+  oddRowBackgroundColor: "var(--surface-1)",
+  rowHoverColor: "var(--surface-3)",
+  selectedRowBackgroundColor: "var(--surface-3)",
+  pinnedRowBackgroundColor: "var(--surface-2)",
   pinnedRowFontWeight: 600,
-  valueChangeValueHighlightBackgroundColor: "rgba(184, 80, 66, 0.22)",
+  valueChangeValueHighlightBackgroundColor: "color-mix(in oklab, var(--brand-500) 22%, transparent)",
   fontFamily: "var(--font-body), ui-sans-serif, system-ui, sans-serif",
-  headerFontFamily: "var(--font-mono-ui), ui-monospace, monospace",
+  headerFontFamily: "var(--font-body), ui-sans-serif, system-ui, sans-serif",
   fontSize: 13,
-  headerFontSize: 11,
-  wrapperBorderRadius: 2,
-  borderRadius: 2,
+  headerFontSize: 12,
+  rowHeight: 52,
+  headerHeight: 40,
+  wrapperBorder: false,
+  wrapperBorderRadius: 0,
+  borderRadius: 6,
+  columnBorder: false,
+  headerColumnBorder: false,
 });
