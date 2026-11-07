@@ -2,7 +2,7 @@
 // stores, products, rewards and shoppers with random ids and removes them
 // afterwards, so it never depends on (or disturbs) the demo seed.
 import '../../src/config/env';
-import { randomUUID } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import prisma from '../../src/db/client';
 import { signToken } from '../../src/utils/crypto';
 
@@ -77,6 +77,21 @@ export class DbFixtures {
     return { merchantId, name, ruleIds, products };
   }
 
+  /** A full-scope sandbox API key for the store; returns the raw key. */
+  async apiKey(merchantId: string): Promise<string> {
+    const rawKey = `tk_test_${randomBytes(24).toString('base64url')}`;
+    await prisma.apiKey.create({
+      data: {
+        merchantId,
+        keyPrefix: rawKey.slice(0, 8),
+        keyHash: createHash('sha256').update(rawKey).digest('hex'),
+        scopes: ['tokens:read', 'tokens:mint', 'merchants:read', 'merchants:write', 'earn_rules:read', 'earn_rules:write'],
+        isSandbox: true,
+      },
+    });
+    return rawKey;
+  }
+
   async shopper(): Promise<string> {
     const customerId = randomUUID();
     this.customerIds.push(customerId);
@@ -132,6 +147,7 @@ export class DbFixtures {
     await prisma.mandate.deleteMany({ where: { customerId } });
     await prisma.product.deleteMany({ where: { merchantId } });
     await prisma.earnRule.deleteMany({ where: { merchantId } });
+    await prisma.apiKey.deleteMany({ where: { merchantId } });
     await prisma.merchant.deleteMany({ where: { id: merchantId } });
     await prisma.wallet.deleteMany({ where: { customerId } });
   }

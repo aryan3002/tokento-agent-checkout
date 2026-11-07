@@ -193,7 +193,9 @@ export class CheckoutService {
           rewardTokenId: null,
           note: err instanceof PayPalApiError
             ? `PayPal refused to create the order (${err.name}${err.debugId ? `, debug_id ${err.debugId}` : ''}).`
-            : 'Could not reach PayPal to create the order.',
+            : err instanceof AppError
+              ? `${err.message} Nothing was charged.`
+              : 'Could not create the PayPal order. Nothing was charged.',
         },
       });
       if (err instanceof PayPalApiError) {
@@ -291,6 +293,25 @@ export class CheckoutService {
       });
     }
     return this.view(order);
+  }
+
+  /**
+   * Close an order nobody finished (sweeper). Releases the hold. Returns false
+   * if the order had already moved on.
+   */
+  async expire(checkoutId: string, reason: string): Promise<boolean> {
+    const closed = await withOrderLock(checkoutId, async (tx) => {
+      const order = await tx.checkoutOrder.findUnique({ where: { id: checkoutId } });
+      if (!order || !CANCELLABLE.includes(order.status)) return null;
+      const status = order.status === CheckoutStatus.PENDING ? CheckoutStatus.FAILED : CheckoutStatus.CANCELLED;
+      await tx.checkoutOrder.update({ where: { id: checkoutId }, data: { status, rewardTokenId: null, note: reason } });
+      return { ...order, status };
+    });
+    if (!closed) return false;
+    emitEvent(EventType.CHECKOUT_CANCELLED, {
+      checkoutId, merchantId: closed.merchantId, customerId: closed.customerId, status: closed.status, reason,
+    });
+    return true;
   }
 
   async get(checkoutId: string, principal: CheckoutPrincipal): Promise<CheckoutOrderView> {

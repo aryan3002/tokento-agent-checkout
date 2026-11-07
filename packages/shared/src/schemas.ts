@@ -116,3 +116,29 @@ export const DateRangeSchema = z.object({
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
 });
+
+// ---- Agent checkout ----
+
+export const QuoteRequestSchema = z.object({
+  productIds: z.array(z.string().uuid()).min(1).max(10),
+  quantity: z.number().int().min(1).max(10).optional(),
+  maxAmountToPay: z.number().positive().optional(),
+});
+
+/** Unknown fields (amounts included) are stripped: the server prices every order itself. */
+export const CreateCheckoutSchema = z.object({
+  productId: z.string().uuid(),
+  quantity: z.number().int().min(1).max(10).default(1),
+  useReward: z.boolean().default(true),
+  paymentMode: z.enum(['auto', 'approval']).default('auto'),
+  agentReason: z.string().max(500).optional(),
+  agentId: z.string().max(64).optional(),
+  idempotencyKey: z.string().min(8).max(128).optional(),
+});
+
+export const CatalogSearchSchema = z.object({
+  q: z.string().max(100).optional(),
+  category: z.string().max(40).optional(),
+  maxPrice: z.coerce.number().positive().optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});

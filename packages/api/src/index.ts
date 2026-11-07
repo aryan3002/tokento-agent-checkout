@@ -27,6 +27,9 @@ import merchantRoutes from './routes/merchant.routes';
 import eventsRoutes from './routes/events.routes';
 import authRoutes from './routes/auth.routes';
 import paypalWebhookRoutes from './routes/paypal-webhook.routes';
+import checkoutRoutes from './routes/checkout.routes';
+import catalogRoutes from './routes/catalog.routes';
+import { startCheckoutSweeper } from './jobs/checkout-sweeper';
 
 // Initialize webhook service (sets up event listeners)
 import './services/webhook.service';
@@ -163,6 +166,8 @@ app.use(`${API_PREFIX}/merchants`, merchantRoutes);
 app.use(`${API_PREFIX}/events`, eventsRoutes);
 app.use(`${API_PREFIX}/auth`, authRoutes);
 app.use(`${API_PREFIX}/paypal/webhooks`, paypalWebhookRoutes);
+app.use(`${API_PREFIX}/checkout`, checkoutRoutes);
+app.use(`${API_PREFIX}/catalog`, catalogRoutes);
 
 // ---- Error Handling ----
 app.use(notFoundHandler());
@@ -177,6 +182,7 @@ const server = app.listen(PORT, () => {
   // filter, so expired tokens linger as ACTIVE and inflate liability reports.
   startExpirySweeper();
   startWebhookRetryWorker();
+  startCheckoutSweeper();
 });
 
 // Without this, every deploy drops in-flight audit writes, idempotency records and

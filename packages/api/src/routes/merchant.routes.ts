@@ -3,6 +3,7 @@
 // ============================================================
 import { Router, Request, Response, NextFunction } from 'express';
 import { refundOrder } from '../checkout/refund';
+import { checkoutService } from '../checkout/checkout.service';
 import { z } from 'zod';
 import { merchantService } from '../services/merchant.service';
 import { authenticateApiKeyOrB2BSession } from '../middleware/auth.middleware';
@@ -103,6 +104,13 @@ router.get('/me/redemptions', authenticateApiKeyOrB2BSession(['tokens:read']), a
 });
 
 // ---- API Keys ----
+// GET /v1/merchants/me/orders — agent orders paid through PayPal, newest first
+router.get('/me/orders', authenticateApiKeyOrB2BSession(['tokens:read']), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({ orders: await checkoutService.listForMerchant(req.merchantId!) });
+  } catch (err) { next(err); }
+});
+
 // POST /v1/merchants/me/orders/:id/refund — full PayPal refund of an agent order
 router.post('/me/orders/:id/refund', authenticateApiKeyOrB2BSession(['merchants:write']), async (req: Request, res: Response, next: NextFunction) => {
   try {
