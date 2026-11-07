@@ -2,7 +2,7 @@
 
 ## Scope and status
 
-Tokento is **sandbox software under active development**. It is not PCI-scoped, has not been independently audited, and holds no real customer data. **Settlement is not implemented — no funds move.** Do not put real money or real personal data through it.
+Tokento is **sandbox software under active development**. It is not PCI-scoped, has not been independently audited, and holds no real customer data. **Payments, refunds and store payouts run on PayPal's sandbox only — no real funds move.** Do not put real money or real personal data through it.
 
 ## Reporting a vulnerability
 
