@@ -268,7 +268,8 @@ export default function Dashboard() {
       setWebhookEndpoints(Array.isArray(endpoints) ? endpoints : []);
       setWebhookDeliveries(Array.isArray(deliveries) ? deliveries : []);
     } catch (err) {
-      console.error("Initial fetch failed", err);
+      // Expected once on first load: the dev B2B session arrives a moment later and this runs again.
+      console.warn("Dashboard fetch failed", err);
     }
   }, []);
 
@@ -318,12 +319,12 @@ export default function Dashboard() {
     }
   }, [currentMerchantId, defaultLoginEmail, loginEmail, refreshAll, updateSessionJwt]);
 
-  // Initial fetch
+  // Initial fetch, and again once a B2B session is in place (the dev session arrives after mount).
   useEffect(() => {
     void Promise.resolve().then(() => {
       refreshAll();
     });
-  }, [refreshAll]);
+  }, [refreshAll, b2bSessionJwt]);
 
   // Tabs that want raw checkout / PayPal events subscribe here; the one SSE connection fans them out.
   const streamListeners = useRef(new Set<(event: StreamEvent) => void>());

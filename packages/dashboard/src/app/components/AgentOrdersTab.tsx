@@ -224,7 +224,7 @@ export function AgentOrdersTab({ request, subscribe }: { request: Request; subsc
       {
         field: "createdAt",
         headerName: "Time",
-        width: 128,
+        width: 140,
         sort: "desc",
         cellClass: "tabular font-mono text-xs",
         valueFormatter: (p) =>
@@ -259,9 +259,9 @@ export function AgentOrdersTab({ request, subscribe }: { request: Request; subsc
       },
       { field: "paypalOrderId", headerName: "PayPal order", width: 158, cellClass: "font-mono text-[11px]", tooltipField: "paypalOrderId" },
       { field: "paypalCaptureId", headerName: "PayPal capture", width: 158, cellClass: "font-mono text-[11px]", tooltipField: "paypalCaptureId" },
-      { field: "statusLabel", headerName: "Status", width: 150, filter: true, cellRenderer: StatusCell },
+      { field: "statusLabel", headerName: "Status", width: 150, filter: true, pinned: "right", cellRenderer: StatusCell },
       { field: "settlementLabel", headerName: "Settlement", width: 116 },
-      { colId: "refund", headerName: "", width: 150, sortable: false, cellRenderer: RefundCell, cellRendererParams: { onRefund: refund } },
+      { colId: "refund", headerName: "", width: 150, sortable: false, pinned: "right", cellRenderer: RefundCell, cellRendererParams: { onRefund: refund } },
     ],
     [refund],
   );
