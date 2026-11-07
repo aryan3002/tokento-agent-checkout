@@ -1,0 +1,23 @@
+{
+  "name": "@tokento/paypal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minimal PayPal REST client (Orders v2, refunds, Payouts, Vault v3, webhook verification) with idempotency built in",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "smoke": "tsx scripts/smoke.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "dotenv": "^16.4.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
