@@ -295,7 +295,7 @@ Tokento makes store loyalty usable by AI agents. Stores issue signed rewards thr
 | `POST` | `/api/v1/tokens/{id}/validate` | Can this reward be used here, and if not, why |
 | `POST` | `/api/v1/tokens/{id}/redeem` | Atomic, idempotent redemption |
 
-Agent checkout adds its own routes for checkout, webhooks, limits and settlement; the TQI itself stays three endpoints. The MCP adapter offers the same three as tools: `query_loyalty_tokens`, `validate_token` and `redeem_token`.
+Agent checkout adds its own routes for checkout, webhooks, limits and settlement; the TQI itself stays three endpoints. The MCP adapter offers the same three as tools (`query_loyalty_tokens`, `validate_token`, `redeem_token`) and agent checkout as four more (`search_products`, `compare_offers`, `start_checkout`, `get_order_status`), so any MCP client, Claude Desktop for example, can shop with the shopper's rewards and pay with PayPal while Tokento does every calculation and enforces every limit ([`packages/mcp-adapter/src/index.ts`](packages/mcp-adapter/src/index.ts)).
 
 Invariants the whole codebase keeps:
 

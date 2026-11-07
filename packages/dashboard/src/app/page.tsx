@@ -1400,12 +1400,19 @@ function DemoTab({ merchant }: { merchant: Merchant | null }) {
       </div>
 
       <div className="glass rounded-xl p-5">
-        <h3 className="font-semibold mb-2">3 — Run the demo</h3>
+        <h3 className="font-semibold mb-2">3 — Let the agent shop</h3>
         <ol className="text-sm text-text-secondary space-y-2 list-decimal list-inside">
-          <li>Open Claude Desktop. Ask: <em>&quot;I&apos;m shopping at {merchant?.name || "Coffee Co."}. Check my wallet for customer 11111111-1111-4111-8111-111111111111.&quot;</em></li>
-          <li>Claude calls <code className="bg-surface-3 px-1 rounded">query_loyalty_tokens</code> via the MCP server.</li>
-          <li>Ask Claude to redeem one of the tokens for a $30 transaction.</li>
-          <li>Watch this dashboard — the token row will flash and move ACTIVE → REDEEMED, and the Redemptions tab will pick up the new entry within ~50ms via SSE.</li>
+          <li>
+            Get a shopper session for the agent. Locally: <code className="bg-surface-3 px-1 rounded">b2c_dev_session::11111111-1111-4111-8111-111111111111</code> (Maya).
+            On the hosted demo: <code className="bg-surface-3 px-1 rounded">curl -X POST $TOKENTO_API_URL/api/v1/demo/shoppers</code> returns a fresh shopper&apos;s token.
+            Tools take it as <code className="bg-surface-3 px-1 rounded">wallet_token</code>; identity never comes from an id argument.
+          </li>
+          <li>Ask Claude Desktop: <em>&quot;My Tokento wallet token is &lt;token&gt;. Reorder my coffee beans, under $30.&quot;</em></li>
+          <li>
+            Claude calls <code className="bg-surface-3 px-1 rounded">search_products</code>, <code className="bg-surface-3 px-1 rounded">compare_offers</code> (Tokento prices every store with the shopper&apos;s rewards) and{" "}
+            <code className="bg-surface-3 px-1 rounded">start_checkout</code>, then gives you the PayPal link to approve. <code className="bg-surface-3 px-1 rounded">get_order_status</code> confirms it was paid.
+          </li>
+          <li>Watch this dashboard: the comparison lands in Agent comparisons and the order in Agent orders, live over SSE. Outside the shopper&apos;s spending limits, Tokento refuses the checkout until the shopper agrees.</li>
         </ol>
       </div>
 
