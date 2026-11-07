@@ -137,6 +137,17 @@ describe('catalog search', () => {
   });
 });
 
+describe('store directory', () => {
+  it('lists the stores that sell through Tokento, by name, so an agent can label rewards', async () => {
+    const customerId = await db.shopper();
+    const res = await request(app).get('/api/v1/catalog/stores').set(as(customerId));
+    expect(res.status).toBe(200);
+    const names = res.body.stores.map((s: { name: string }) => s.name);
+    expect(names).toEqual(expect.arrayContaining(['Coffee Co. (routes test)', 'Harbor (routes test)']));
+    expect(res.body.stores.find((s: { name: string }) => s.name === 'Coffee Co. (routes test)').merchantId).toBe(coffee.merchantId);
+  });
+});
+
 describe('store order routes', () => {
   it('a store sees only its own agent orders', async () => {
     const customerId = await shopperWithReward();

@@ -53,3 +53,13 @@ export async function searchProducts(
     merchantName: p.merchant.name,
   }));
 }
+
+/** Stores with something to sell in this environment, so agents can name a reward's store. */
+export async function listStores(isSandbox: boolean): Promise<Array<{ merchantId: string; name: string }>> {
+  const merchants = await prisma.merchant.findMany({
+    where: { isSandbox, products: { some: { isActive: true, isSandbox } } },
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  });
+  return merchants.map((m) => ({ merchantId: m.id, name: m.name }));
+}
