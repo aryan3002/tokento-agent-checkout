@@ -190,7 +190,30 @@ describe("runAgentTurn", () => {
   });
 
   it("uses the tool call id as the checkout idempotency key, so a retried call can't buy twice", async () => {
-    const order = { id: "order-1", status: "CREATED", amountToPay: 23, paypal: { approvalUrl: "https://www.sandbox.paypal.com/checkoutnow?token=X" } };
+    // A complete CheckoutOrderView, as the API returns it.
+    const order = {
+      id: "order-1",
+      status: "CREATED",
+      customerId: "shopper-1",
+      merchant: { id: "m-coffee", name: "Coffee Co." },
+      product: { id: "p-coffee", name: "Morning Ridge Blend, 2 lb", sku: "CC-MRB-2LB" },
+      quantity: 1,
+      subtotal: 28,
+      reward: { tokenId: "t-5", amount: 5, state: "held" },
+      amountToPay: 23,
+      earned: { tokenId: null, amount: 5, state: "expected" },
+      paymentMode: "approval",
+      outsideMandate: false,
+      paypal: { orderId: "PP-1", captureId: null, refundId: null, approvalUrl: "https://www.sandbox.paypal.com/checkoutnow?token=PP-1" },
+      platformFee: 0,
+      settlement: { batchId: null, state: "unsettled" },
+      agentReason: "Best total value",
+      note: null,
+      receipt: "Morning Ridge Blend, 2 lb at Coffee Co.: $28.00 − $5.00 reward = $23.00, waiting for PayPal approval.",
+      createdAt: "2026-11-09T18:00:00.000Z",
+      completedAt: null,
+      refundedAt: null,
+    };
     const { claude } = fakeClaude([
       message([toolUse("toolu_buy", "start_checkout", { product_id: "p-coffee", reason: "Best total value", quantity: 1 })], "tool_use"),
       message([text("Approve in PayPal below.")], "end_turn"),
