@@ -4,13 +4,14 @@
 // PayPal connection, theme and collapse. On phones it opens as a drawer.
 import { useEffect, useRef, useState } from "react";
 
-export type Page = "overview" | "agent-orders" | "payouts" | "rewards" | "paypal-events" | "connect" | "webhooks" | "status" | "settings";
+export type Page = "overview" | "agent-orders" | "comparisons" | "payouts" | "rewards" | "paypal-events" | "connect" | "webhooks" | "status" | "settings";
 export type Theme = "system" | "light" | "dark";
 export type Connection = "connecting" | "live" | "down";
 
 const ICONS: Record<string, string> = {
   overview: "M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z",
   "agent-orders": "M6 2h12v20l-3-2-3 2-3-2-3 2zM9 7h6M9 11h6M9 15h4",
+  comparisons: "M12 3v18M7 21h10M4 7h16M4 7l-3 7a3 3 0 0 0 6 0zM20 7l-3 7a3 3 0 0 0 6 0z",
   payouts: "M3 6h18v13H3zM3 10h18M7 15h4",
   rewards: "M20 12v9H4v-9M2 7h20v5H2zM12 21V7M12 7C10 3 6 3 6 6s6 1 6 1 6 2 6-1-4-3-6 1z",
   "paypal-events": "M3 12h4l3-8 4 16 3-8h4",
@@ -41,6 +42,8 @@ export function Sidebar(props: {
   onSelect: (page: Page) => void;
   storeName: string;
   ordersCount: number | null;
+  /** All-time agent comparisons that included this store. */
+  comparisonsCount?: number | null;
   owedLabel: string | null;
   eventsCount: number | null;
   connection: Connection;
@@ -73,6 +76,7 @@ export function Sidebar(props: {
   const main: NavItem[] = [
     { page: "overview", label: "Overview" },
     { page: "agent-orders", label: "Agent orders", meta: props.ordersCount === null ? null : String(props.ordersCount) },
+    { page: "comparisons", label: "Agent comparisons", meta: props.comparisonsCount == null ? null : String(props.comparisonsCount) },
     { page: "payouts", label: "Payouts", meta: props.owedLabel },
     { page: "rewards", label: "Rewards" },
     { page: "paypal-events", label: "PayPal activity", meta: props.eventsCount === null ? null : String(props.eventsCount) },

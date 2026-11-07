@@ -5,7 +5,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { refundOrder } from '../checkout/refund';
 import { checkoutService } from '../checkout/checkout.service';
 import { listPayPalEventsForMerchant } from '../checkout/paypal-events';
-import { comparisonStats } from '../checkout/agent-comparisons';
+import { comparisonStats, recentComparisons } from '../checkout/agent-comparisons';
 import { settlementService } from '../settlement/settlement.service';
 import { z } from 'zod';
 import { merchantService } from '../services/merchant.service';
@@ -133,6 +133,19 @@ router.get('/me/paypal-events', authenticateApiKeyOrB2BSession(['tokens:read']),
 router.get('/me/agent-comparisons', authenticateApiKeyOrB2BSession(['merchants:read']), async (req: Request, res: Response, next: NextFunction) => {
   try {
     res.json(await comparisonStats(req.merchantId!, req.isSandbox ?? true));
+  } catch (err) { next(err); }
+});
+
+// GET /v1/merchants/me/agent-comparisons/recent?limit=100 — this store's comparison lines, newest first (max 500)
+router.get('/me/agent-comparisons/recent', authenticateApiKeyOrB2BSession(['merchants:read']), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const raw = req.query.limit;
+    const limit = raw === undefined ? 100 : Number(raw);
+    if (!Number.isInteger(limit) || limit < 1) {
+      res.status(400).json({ error: { code: 'invalid_limit', message: 'limit must be a whole number of 1 or more.' } });
+      return;
+    }
+    res.json({ comparisons: await recentComparisons(req.merchantId!, req.isSandbox ?? true, Math.min(limit, 500)) });
   } catch (err) { next(err); }
 });
 

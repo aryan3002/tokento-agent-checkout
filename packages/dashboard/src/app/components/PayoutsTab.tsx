@@ -4,9 +4,12 @@
 // that pays it through PayPal Payouts, and every payout so far in AG Grid.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AgGridReact } from "ag-grid-react";
-import type { ColDef, ICellRendererParams, ValueFormatterParams } from "ag-grid-community";
+import type { ColDef, GridApi, ICellRendererParams, ValueFormatterParams } from "ag-grid-community";
 import type { SettlementPreview, SettlementView } from "@tokento/shared";
 import { ledgerTheme } from "./grid-theme";
+import { GridToolbar, useGridLayout } from "./GridToolbar";
+
+const LAYOUT_KEY = "tokento.grid.payouts.v1";
 import { payoutStatus, previewBreakdown } from "./payouts";
 import type { StreamEvent } from "./AgentOrdersTab";
 
@@ -118,6 +121,35 @@ export function PayoutsTab({ request, subscribe }: { request: Request; subscribe
   );
 
   return (
+    <PayoutsView
+      preview={preview}
+      settlements={settlements}
+      busy={busy}
+      error={error}
+      settleNow={settleNow}
+      columnDefs={columnDefs}
+    />
+  );
+}
+
+function PayoutsView({
+  preview,
+  settlements,
+  busy,
+  error,
+  settleNow,
+  columnDefs,
+}: {
+  preview: SettlementPreview | null;
+  settlements: SettlementView[] | null;
+  busy: boolean;
+  error: string | null;
+  settleNow: () => Promise<void>;
+  columnDefs: ColDef<SettlementView>[];
+}) {
+  const [gridApi, setGridApi] = useState<GridApi<SettlementView> | null>(null);
+  const layout = useGridLayout(LAYOUT_KEY);
+  return (
     <div className="space-y-6">
       <section className="glass flex flex-wrap items-end justify-between gap-6 p-5">
         <div>
@@ -151,21 +183,26 @@ export function PayoutsTab({ request, subscribe }: { request: Request; subscribe
       </section>
 
       <section className="overflow-hidden rounded-xl border border-border bg-surface-1">
-        <div className="border-b border-border px-4 py-3">
-          <p className="text-sm font-medium">Past payouts</p>
-          <p className="mt-0.5 text-[13px] text-text-muted">Each Settle is one PayPal Payouts batch. Its status changes when PayPal confirms it.</p>
-        </div>
-        <AgGridReact<SettlementView>
-          theme={ledgerTheme}
-          rowData={settlements ?? undefined}
-          loading={settlements === null && !error}
-          columnDefs={columnDefs}
-          defaultColDef={{ sortable: true, resizable: true, cellDataType: false, suppressHeaderMenuButton: true, enableCellChangeFlash: true }}
-          getRowId={(p) => p.data.id}
-          domLayout="autoHeight"
-          tooltipShowDelay={300}
-          overlayNoRowsTemplate="<span>No payouts yet. Settle now sends the first one.</span>"
-        />
+        <GridToolbar api={gridApi} grid="payouts" storageKey={LAYOUT_KEY} placeholder="Search payouts">
+          <p className="text-sm font-medium text-text-primary">Past payouts</p>
+          <p className="mt-0.5">Each Settle is one PayPal Payouts batch. Its status changes when PayPal confirms it.</p>
+        </GridToolbar>
+        {layout.ready && (
+          <AgGridReact<SettlementView>
+            theme={ledgerTheme}
+            rowData={settlements ?? undefined}
+            loading={settlements === null && !error}
+            columnDefs={columnDefs}
+            defaultColDef={{ sortable: true, resizable: true, cellDataType: false, suppressHeaderMenuButton: true, enableCellChangeFlash: true }}
+            getRowId={(p) => p.data.id}
+            onGridReady={(e) => setGridApi(e.api)}
+            initialState={layout.initialState}
+            onStateUpdated={layout.onStateUpdated}
+            domLayout="autoHeight"
+            tooltipShowDelay={300}
+            overlayNoRowsTemplate="<span>No payouts yet. Settle now sends the first one.</span>"
+          />
+        )}
       </section>
     </div>
   );

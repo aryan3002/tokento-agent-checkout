@@ -290,6 +290,7 @@ h1, h2, h3, .display {
 .dot-warning { background: var(--dot-warning); }
 .dot-error { background: var(--dot-error); }
 .dot-neutral { background: var(--dot-neutral); }
+.dot-brand { background: var(--brand-500); }
 
 @media (prefers-reduced-motion: reduce) {
   *,

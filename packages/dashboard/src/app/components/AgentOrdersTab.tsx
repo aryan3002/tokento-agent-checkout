@@ -17,6 +17,9 @@ import {
 import type { CheckoutOrderView } from "@tokento/shared";
 import { orderStats, orderTotals, toOrderRow, upsertById, type AgentOrderRow } from "./agent-orders";
 import { ledgerTheme } from "./grid-theme";
+import { GridToolbar, useGridLayout } from "./GridToolbar";
+
+const LAYOUT_KEY = "tokento.grid.agent-orders.v1";
 
 export type StreamEvent = { type: string; payload: Record<string, unknown> };
 type Request = <T>(path: string, init?: RequestInit) => Promise<T>;
@@ -112,6 +115,8 @@ export function AgentOrdersTab({ request, subscribe }: { request: Request; subsc
   // The grid owns its rows after the first load; this mirror feeds the stats and totals.
   const ordersRef = useRef<CheckoutOrderView[]>([]);
   const gridApiRef = useRef<GridApi<AgentOrderRow> | null>(null);
+  const [gridApi, setGridApi] = useState<GridApi<AgentOrderRow> | null>(null);
+  const layout = useGridLayout(LAYOUT_KEY);
 
   const replaceOrders = useCallback((list: CheckoutOrderView[]) => {
     ordersRef.current = list;
@@ -229,6 +234,7 @@ export function AgentOrdersTab({ request, subscribe }: { request: Request; subsc
   const onGridReady = useCallback((e: GridReadyEvent<AgentOrderRow>) => {
     gridApiRef.current = e.api;
     e.api.setGridOption("rowData", ordersRef.current.map(toOrderRow));
+    setGridApi(e.api);
   }, []);
 
   const getRowId = useCallback((p: GetRowIdParams<AgentOrderRow>) => p.data.id, []);
@@ -245,24 +251,28 @@ export function AgentOrdersTab({ request, subscribe }: { request: Request; subsc
       </section>
 
       <section className="overflow-hidden rounded-xl border border-border bg-surface-1">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
-          <p className="text-[13px] text-text-muted">Newest first. Rows update the moment PayPal confirms a payment. Click a column to sort.</p>
+        <GridToolbar api={gridApi} grid="agent-orders" storageKey={LAYOUT_KEY} placeholder="Search orders">
+          <p>Newest first. Rows update the moment PayPal confirms a payment. Drag, resize or sort columns; the layout is remembered.</p>
           {loadError && <p className="text-xs text-error">{loadError}</p>}
           {actionError && <p className="text-xs text-error">{actionError}</p>}
-        </div>
-        <AgGridReact<AgentOrderRow>
-          theme={ledgerTheme}
-          columnDefs={columnDefs}
-          defaultColDef={defaultColDef}
-          getRowId={getRowId}
-          onGridReady={onGridReady}
-          pinnedBottomRowData={totals}
-          loading={orders === null && !loadError}
-          domLayout="autoHeight"
-          animateRows
-          tooltipShowDelay={300}
-          overlayNoRowsTemplate="<span>No agent orders yet. They appear here live when a shopping agent buys.</span>"
-        />
+        </GridToolbar>
+        {layout.ready && (
+          <AgGridReact<AgentOrderRow>
+            theme={ledgerTheme}
+            columnDefs={columnDefs}
+            defaultColDef={defaultColDef}
+            getRowId={getRowId}
+            onGridReady={onGridReady}
+            initialState={layout.initialState}
+            onStateUpdated={layout.onStateUpdated}
+            pinnedBottomRowData={totals}
+            loading={orders === null && !loadError}
+            domLayout="autoHeight"
+            animateRows
+            tooltipShowDelay={300}
+            overlayNoRowsTemplate="<span>No agent orders yet. They appear here live when a shopping agent buys.</span>"
+          />
+        )}
       </section>
     </div>
   );

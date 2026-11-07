@@ -5,10 +5,11 @@
 // so a store can see how often shopping agents recommend it and how often its
 // rewards were the reason. Stores only ever read their own lines.
 import { randomUUID } from 'crypto';
-import { EventType, type AgentComparisonStats, type ComparisonOutcome, type OfferView } from '@tokento/shared';
+import { EventType, type AgentComparisonLine, type AgentComparisonStats, type ComparisonOutcome, type OfferView } from '@tokento/shared';
 import prisma from '../db/client';
 import { emitEvent } from '../events/emitter';
 import { logger } from '../utils/logger';
+import { toMoneyNumber } from '../utils/money';
 import { comparisonOutcomes } from './comparison-outcomes';
 
 /**
@@ -70,4 +71,24 @@ export async function comparisonStats(merchantId: string, isSandbox: boolean): P
     notChosen,
     lastComparedAt: latest ? latest.toISOString() : null,
   };
+}
+
+/** This store's latest comparison lines, newest first (its own numbers only). */
+export async function recentComparisons(merchantId: string, isSandbox: boolean, limit: number): Promise<AgentComparisonLine[]> {
+  const rows = await prisma.agentComparison.findMany({
+    where: { merchantId, isSandbox },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+    include: { product: { select: { name: true } } },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    createdAt: r.createdAt.toISOString(),
+    productName: r.product.name,
+    quantity: r.quantity,
+    subtotal: toMoneyNumber(r.subtotal),
+    effectiveCost: toMoneyNumber(r.effectiveCost),
+    storesCompared: r.storesCompared,
+    outcome: r.outcome as ComparisonOutcome,
+  }));
 }

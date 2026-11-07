@@ -298,3 +298,58 @@ describe("live updates on a store's event stream", () => {
     }
   });
 });
+
+describe("a store's recent agent comparisons", () => {
+  const recent = (apiKey: string, query = '') => request(app).get(`/api/v1/merchants/me/agent-comparisons/recent${query}`).set('X-API-Key', apiKey);
+
+  it("lists this store's own lines, newest first, with the product name and no other store's data", async () => {
+    const mine = await db.store('Listed store', { products: [{ key: 'beans', name: 'House beans, 2 lb', price: '20.00' }] });
+    const other = await db.store('Other listed store', { products: [{ key: 'beans', name: 'Rival beans, 2 lb', price: '19.00' }] });
+    const line = (store: typeof mine, outcome: string, createdAt: string, isSandbox = true) => ({
+      comparisonId: randomUUID(), merchantId: store.merchantId, productId: store.products.beans, outcome,
+      quantity: 2, subtotal: 40, effectiveCost: 35, storesCompared: 3, isSandbox, createdAt: new Date(createdAt),
+    });
+    await prisma.agentComparison.createMany({
+      data: [
+        line(mine, 'won_with_rewards', '2026-11-01T10:00:00Z'),
+        line(mine, 'not_chosen', '2026-11-03T10:00:00Z'),
+        line(mine, 'won_on_price', '2026-11-02T10:00:00Z'),
+        line(mine, 'won_on_price', '2026-11-04T10:00:00Z', false),
+        line(other, 'won_with_rewards', '2026-11-05T10:00:00Z'),
+      ],
+    });
+
+    const res = await recent(await db.apiKey(mine.merchantId));
+    expect(res.status).toBe(200);
+    expect(res.body.comparisons.map((c: { outcome: string; createdAt: string }) => [c.outcome, c.createdAt])).toEqual([
+      ['not_chosen', '2026-11-03T10:00:00.000Z'],
+      ['won_on_price', '2026-11-02T10:00:00.000Z'],
+      ['won_with_rewards', '2026-11-01T10:00:00.000Z'],
+    ]);
+    expect(res.body.comparisons[0]).toEqual({
+      id: expect.any(String),
+      createdAt: '2026-11-03T10:00:00.000Z',
+      productName: 'House beans, 2 lb',
+      quantity: 2,
+      subtotal: 40,
+      effectiveCost: 35,
+      storesCompared: 3,
+      outcome: 'not_chosen',
+    });
+    expect(JSON.stringify(res.body)).not.toContain('Rival');
+  });
+
+  it('returns at most the number asked for, capped at 500', async () => {
+    const store = await db.store('Busy store', { products: [{ key: 'beans', name: 'Beans', price: '20.00' }] });
+    await prisma.agentComparison.createMany({
+      data: Array.from({ length: 4 }, (_, i) => ({
+        comparisonId: randomUUID(), merchantId: store.merchantId, productId: store.products.beans, outcome: 'won_on_price',
+        quantity: 1, subtotal: 20, effectiveCost: 20, storesCompared: 2, isSandbox: true, createdAt: new Date(Date.UTC(2026, 10, 1 + i)),
+      })),
+    });
+    const key = await db.apiKey(store.merchantId);
+    expect((await recent(key, '?limit=2')).body.comparisons).toHaveLength(2);
+    expect((await recent(key, '?limit=9999')).body.comparisons).toHaveLength(4);
+    expect((await recent(key, '?limit=abc')).status).toBe(400);
+  });
+});

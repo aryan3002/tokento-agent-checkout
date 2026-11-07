@@ -375,6 +375,21 @@ export interface QuoteResponse {
  */
 export type ComparisonOutcome = 'won_with_rewards' | 'won_on_price' | 'not_chosen';
 
+/** One agent comparison as the store sees it: its own offer and outcome only, never another store's. */
+export interface AgentComparisonLine {
+  id: string;
+  createdAt: string;
+  /** The store's best offer in the comparison. */
+  productName: string;
+  quantity: number;
+  /** The store's sticker price for that quantity. */
+  subtotal: number;
+  /** What the shopper would really pay at this store after rewards spent and earned. */
+  effectiveCost: number;
+  storesCompared: number;
+  outcome: ComparisonOutcome;
+}
+
 /** How often shopping agents recommended a store when they compared it with other stores. All time, this environment. */
 export interface AgentComparisonStats {
   /** Agent comparisons of two or more stores that included this store. */

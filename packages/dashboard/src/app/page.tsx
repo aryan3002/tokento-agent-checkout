@@ -5,6 +5,7 @@ import { AgentOrdersTab, type StreamEvent } from "./components/AgentOrdersTab";
 import { PayoutsTab } from "./components/PayoutsTab";
 import { PayPalEventsFeed } from "./components/PayPalEventsFeed";
 import { OverviewPage } from "./components/OverviewPage";
+import { ComparisonsTab } from "./components/ComparisonsTab";
 import { Sidebar, type Page, type Theme } from "./components/Sidebar";
 import { useStoreActivity } from "./components/useStoreActivity";
 import { orderIdFromSearch } from "./components/order-link";
@@ -118,6 +119,7 @@ type LoginStatus = "idle" | "sending" | "sent" | "error";
 const PAGES: Record<Page, { title: string; about: string }> = {
   overview: { title: "Overview", about: "" },
   "agent-orders": { title: "Agent orders", about: "Every purchase an AI shopping agent made here, paid with PayPal. Updates live." },
+  comparisons: { title: "Agent comparisons", about: "Every time a shopping agent compared your store with others: your offer, what it really cost the shopper, and whether the agent picked you. Updates live." },
   payouts: { title: "Payouts", about: "What you are owed for agent sales. Settle sends it to your PayPal account with PayPal Payouts." },
   rewards: { title: "Rewards", about: "The rewards you give shoppers, the rules that earn them, and when shoppers spend them." },
   "paypal-events": { title: "PayPal activity", about: "Messages from PayPal about your orders. Tokento checks each one with PayPal before acting on it." },
@@ -565,6 +567,7 @@ export default function Dashboard() {
         onSelect={selectPage}
         storeName={merchant?.name || "Your store"}
         ordersCount={ordersCount}
+        comparisonsCount={activity.comparisons?.comparisons ?? null}
         owedLabel={owedNet > 0 ? `$${owedNet.toFixed(2)}` : null}
         eventsCount={activity.events?.length ?? null}
         connection={connection}
@@ -614,6 +617,7 @@ export default function Dashboard() {
                 <p className="mt-1 text-sm text-text-muted">{PAGES[tab].about}</p>
               </div>
               {tab === "agent-orders" && <AgentOrdersTab request={api} subscribe={subscribeStream} />}
+              {tab === "comparisons" && <ComparisonsTab request={api} subscribe={subscribeStream} stats={activity.comparisons} />}
               {tab === "payouts" && <PayoutsTab request={api} subscribe={subscribeStream} />}
               {tab === "rewards" && (
                 <RewardsPage

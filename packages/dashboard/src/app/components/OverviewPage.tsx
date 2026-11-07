@@ -174,7 +174,7 @@ export function OverviewPage({
       </section>
 
       {!activity.comparisonsFailed && (
-        <WhyAgentsPickYou stats={activity.comparisons} fresh={activity.comparisonsFresh} now={now} />
+        <WhyAgentsPickYou stats={activity.comparisons} fresh={activity.comparisonsFresh} now={now} onSeeAll={() => onNavigate("comparisons")} />
       )}
 
       <div className="flex flex-wrap items-start gap-6">
@@ -220,7 +220,7 @@ const BAR: Record<ComparisonOutcome, string> = {
   not_chosen: "bg-text-muted/60",
 };
 
-function WhyAgentsPickYou({ stats, fresh, now }: { stats: AgentComparisonStats | null; fresh: boolean; now: Date }) {
+function WhyAgentsPickYou({ stats, fresh, now, onSeeAll }: { stats: AgentComparisonStats | null; fresh: boolean; now: Date; onSeeAll: () => void }) {
   if (!stats) return <div className="skeleton h-32" />;
   const summary = comparisonSummary(stats);
   const barLabel = summary.segments.map((seg) => `${seg.label}: ${seg.count}`).join(", ");
@@ -230,6 +230,9 @@ function WhyAgentsPickYou({ stats, fresh, now }: { stats: AgentComparisonStats |
         <h2 id="why-agents" className="text-base font-semibold">Why agents pick you</h2>
         {stats.lastComparedAt && (
           <span className="text-xs text-text-muted">Last comparison {relativeTime(stats.lastComparedAt, now)}</span>
+        )}
+        {stats.comparisons > 0 && (
+          <button type="button" onClick={onSeeAll} className="ml-auto text-sm text-brand-500 hover:underline">See every comparison →</button>
         )}
       </div>
       {/* Remounts on each new comparison so the wash replays while the agent shops. */}
