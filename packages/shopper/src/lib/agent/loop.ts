@@ -54,6 +54,15 @@ function requestParams(input: AgentHistory, config: AgentModelConfig): StreamPar
   };
 }
 
+/** A reasoning summary opens with a bold title; that title alone is the chat's progress line. */
+function progressNote(summary: string): string {
+  const text = summary.trim();
+  const title = /^\*\*(.+?)\*\*/.exec(text)?.[1]?.trim();
+  if (title) return title;
+  const first = text.split(/(?<=[.!?])\s/)[0] ?? text;
+  return first.length > 140 ? `${first.slice(0, 139)}…` : first;
+}
+
 /** The model's arguments are a JSON string; broken JSON reaches the tool's validation and fails there. */
 function parseArguments(raw: string): unknown {
   try {
@@ -94,7 +103,7 @@ export async function* runAgentTurn(
             yield { type: "text", delta: event.delta };
             break;
           case "response.reasoning_summary_text.done": {
-            const note = event.text.trim();
+            const note = progressNote(event.text);
             if (note) yield { type: "progress", text: note };
             break;
           }

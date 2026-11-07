@@ -164,6 +164,17 @@ describe("runAgentTurn", () => {
     expect(events).toContainEqual({ type: "progress", text: "Checking the catalog first." });
   });
 
+  it("shows only the title of a reasoning summary as the progress line", async () => {
+    const { model } = fakeModel([
+      response([reasoning("**Checking order status**\n\nThe user has a recent order waiting for approval, so I'll check it first.", "enc-1"), say("One moment.")]),
+    ]);
+    const { api } = fakeApi();
+
+    const events = await collect(runAgentTurn({ model, config, api }, [], "Reorder"));
+
+    expect(events.filter((e) => e.type === "progress")).toEqual([{ type: "progress", text: "Checking order status" }]);
+  });
+
   it("turns a Tokento API error into a failed tool result carrying the API's own message", async () => {
     const violation = "Over the $20.00 per-purchase limit. Ask the shopper first. If they agree, retry with paymentMode \"approval\" so they approve this payment in PayPal themselves.";
     const { model, requests } = fakeModel([
