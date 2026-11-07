@@ -20,6 +20,12 @@ RUN pnpm --filter @tokento/api exec prisma generate \
  && pnpm --filter @tokento/paypal build \
  && pnpm --filter @tokento/api build
 
+# Run as the image's unprivileged user. The API writes nothing to disk, and the
+# start command calls the local Prisma binary directly so neither npx nor corepack
+# needs to download anything at runtime.
+USER node
 ENV NODE_ENV=production PORT=4000
 EXPOSE 4000
-CMD ["sh", "-c", "cd packages/api && npx prisma migrate deploy && node dist/index.js"]
+WORKDIR /app/packages/api
+# migrate deploy applies committed migrations only; never db push.
+CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && exec node dist/index.js"]
