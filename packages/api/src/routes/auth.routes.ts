@@ -379,11 +379,13 @@ router.post('/b2c/authenticate', async (req: Request, res: Response, next: NextF
 
 router.get('/b2b/dev-session', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    if (!usingPlaceholderB2BConfig()) {
+    // Production rejects dev sessions on every call (assertDevSessionAllowed), so never
+    // hand one out there — the hosted demo runs on placeholder Stytch with DEMO_MODE.
+    if (!usingPlaceholderB2BConfig() || process.env.NODE_ENV === 'production') {
       res.status(403).json({
         error: {
           code: 'dev_session_disabled',
-          message: 'Dev session endpoint is disabled when real Stytch credentials are configured.',
+          message: 'Dev sessions are disabled in production and when real Stytch credentials are configured.',
         },
         requestId: req.requestId || 'unknown',
       });

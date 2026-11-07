@@ -102,6 +102,23 @@ describe('auth magic-link routes', () => {
     expect(res.body.error.code).toBe('dev_session_disabled');
   });
 
+  // The hosted demo runs in production on placeholder Stytch (DEMO_MODE). A dev session
+  // handed out there is rejected on every call, so the dashboard would loop fetching it.
+  it('refuses dev B2B sessions in production even with placeholder credentials', async () => {
+    mocks.usingPlaceholderB2BConfig.mockReturnValue(true);
+    vi.stubEnv('NODE_ENV', 'production');
+    try {
+      const res = await request(createApp())
+        .get('/api/v1/auth/b2b/dev-session')
+        .expect(403);
+
+      expect(res.body.error.code).toBe('dev_session_disabled');
+      expect(mocks.createDevB2BSessionJwt).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('completes B2C widget callback with customer-bound session', async () => {
     const stateRes = await request(createApp())
       .post('/api/v1/auth/b2c/widget/state')
