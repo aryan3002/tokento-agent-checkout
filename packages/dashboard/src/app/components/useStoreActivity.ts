@@ -27,7 +27,11 @@ export interface StoreActivity {
   refreshPayouts: () => Promise<void>;
 }
 
-export function useStoreActivity(request: Request, subscribe: Subscribe): StoreActivity {
+/**
+ * sessionKey: the signed-in session, if any. Locally the dev session arrives after the first
+ * requests went out (and were refused), so everything is loaded again once it is in place.
+ */
+export function useStoreActivity(request: Request, subscribe: Subscribe, sessionKey: string | null = null): StoreActivity {
   const [orders, setOrders] = useState<CheckoutOrderView[] | null>(null);
   const [events, setEvents] = useState<PayPalEventView[] | null>(null);
   const [payouts, setPayouts] = useState<SettlementView[] | null>(null);
@@ -55,7 +59,7 @@ export function useStoreActivity(request: Request, subscribe: Subscribe): StoreA
   useEffect(() => {
     let stale = false;
     request<{ orders: CheckoutOrderView[] }>("/api/v1/merchants/me/orders")
-      .then((res) => { if (!stale) setOrders(res.orders); })
+      .then((res) => { if (!stale) { setOrders(res.orders); setLoadError(null); } })
       .catch(() => { if (!stale) setLoadError("Couldn't load orders. Check that the Tokento API is running."); });
     request<{ events: PayPalEventView[] }>("/api/v1/merchants/me/paypal-events")
       .then((res) => { if (!stale) setEvents(res.events); })
@@ -64,10 +68,10 @@ export function useStoreActivity(request: Request, subscribe: Subscribe): StoreA
       .then(refreshPayouts)
       .catch(() => { if (!stale) setPayouts([]); });
     loadComparisons()
-      .then((res) => { if (!stale) setComparisons(res); })
+      .then((res) => { if (!stale) { setComparisons(res); setComparisonsFailed(false); } })
       .catch(() => { if (!stale) setComparisonsFailed(true); });
     return () => { stale = true; };
-  }, [request, refreshPayouts, loadComparisons]);
+  }, [request, refreshPayouts, loadComparisons, sessionKey]);
 
   useEffect(
     () =>

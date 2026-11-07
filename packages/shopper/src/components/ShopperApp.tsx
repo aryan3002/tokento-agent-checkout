@@ -15,9 +15,9 @@ import { MandatePanel, type MandateData } from "./MandatePanel";
 import { OfferTable } from "./OfferTable";
 import { WalletPanel } from "./WalletPanel";
 import { ThemeToggle } from "./ThemeToggle";
+import { DASHBOARD_URL } from "@/lib/store-link";
 
 // The store's side of the demo, linked from the header so judges can watch both halves.
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL || "http://localhost:3100";
 
 const SUGGESTIONS = ["Reorder my coffee beans, under $30", "What rewards do I have?", "Find me a travel mug"];
 

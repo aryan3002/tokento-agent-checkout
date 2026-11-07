@@ -7,6 +7,7 @@ import { PayPalEventsFeed } from "./components/PayPalEventsFeed";
 import { OverviewPage } from "./components/OverviewPage";
 import { Sidebar, type Page, type Theme } from "./components/Sidebar";
 import { useStoreActivity } from "./components/useStoreActivity";
+import { orderIdFromSearch } from "./components/order-link";
 import { overviewStats } from "./components/overview";
 
 // Where "Try it as a shopper" goes: the hosted shopper app, or the local one in development.
@@ -485,7 +486,25 @@ export default function Dashboard() {
     }
   };
 
-  const activity = useStoreActivity(api, subscribeStream);
+  const activity = useStoreActivity(api, subscribeStream, b2bSessionJwt);
+
+  // Opened from a shopper's paid order (/?order=<id>): feature that order on the Overview.
+  const [focusOrderId, setFocusOrderId] = useState<string | null>(null);
+  useEffect(() => {
+    void Promise.resolve().then(() => {
+      const id = orderIdFromSearch(window.location.search);
+      if (id) {
+        setFocusOrderId(id);
+        setTab("overview");
+      }
+    });
+  }, []);
+  const clearFocus = useCallback(() => {
+    setFocusOrderId(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("order");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }, []);
 
   // Theme and sidebar width are per-browser conveniences; the theme script in the layout applied the theme already.
   useEffect(() => {
@@ -579,7 +598,15 @@ export default function Dashboard() {
 
         <main className="flex-1 px-4 py-7 md:px-8">
           {tab === "overview" ? (
-            <OverviewPage activity={activity} storeName={merchant?.name || "your store"} shopperUrl={SHOPPER_URL} onNavigate={selectPage} />
+            <OverviewPage
+              activity={activity}
+              storeName={merchant?.name || "your store"}
+              shopperUrl={SHOPPER_URL}
+              onNavigate={selectPage}
+              focusOrderId={focusOrderId}
+              onClearFocus={clearFocus}
+              request={api}
+            />
           ) : (
             <div className="mx-auto w-full max-w-[1160px]">
               <div className="mb-6">

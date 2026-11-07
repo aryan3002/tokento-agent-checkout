@@ -5,6 +5,7 @@ import { useState } from "react";
 import { PayPalOneTimePaymentButton } from "@paypal/react-paypal-js/sdk-v6";
 import type { CheckoutOrderView } from "@tokento/shared";
 import { usd } from "@/lib/format";
+import { DASHBOARD_URL, storeViewUrl } from "@/lib/store-link";
 
 const WAITING = ["CREATED", "APPROVED"];
 
@@ -30,6 +31,7 @@ export function CheckoutCard({
   const [busy, setBusy] = useState(false);
   const waiting = WAITING.includes(order.status);
   const paid = order.status === "COMPLETED";
+  const storeUrl = storeViewUrl(DASHBOARD_URL, order);
 
   async function cancel() {
     setBusy(true);
@@ -118,6 +120,11 @@ export function CheckoutCard({
       )}
       {!waiting && !paid && order.status !== "REFUNDED" && <p className="mt-3 text-sm text-text-secondary">{order.receipt}</p>}
       {order.status === "REFUNDED" && <p className="mt-3 text-sm text-text-secondary">{order.receipt}</p>}
+      {storeUrl && (
+        <a href={storeUrl} target="_blank" rel="noreferrer" className="ink-link mt-3 inline-flex items-center gap-1 text-sm font-medium">
+          See what the store sees ↗
+        </a>
+      )}
       {error && <p className="mt-2 text-sm text-error">{error}</p>}
     </div>
   );

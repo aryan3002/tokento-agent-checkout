@@ -3,11 +3,12 @@
 // Overview: what AI shopping agents bought from this store, in words anyone can
 // follow. How it works, the latest order as the shopper saw it, four numbers with
 // what they mean, why agents pick this store, recent orders, and who did what.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentComparisonStats, CheckoutOrderView, ComparisonOutcome } from "@tokento/shared";
 import { comparisonSummary } from "./agent-comparisons";
+import { featuredOrder } from "./order-link";
 import { maskShopper, orderStats, toOrderRow } from "./agent-orders";
-import { activityFeed, latestOrder, orderLifecycle, relativeTime, statusTone, usd, type ActivityItem, type LifecycleStep, type Tone } from "./overview-data";
+import { activityFeed, orderLifecycle, relativeTime, statusTone, usd, type ActivityItem, type LifecycleStep, type Tone } from "./overview-data";
 import type { Page } from "./Sidebar";
 import type { StoreActivity } from "./useStoreActivity";
 
@@ -35,15 +36,37 @@ export function OverviewPage({
   storeName,
   shopperUrl,
   onNavigate,
+  focusOrderId,
+  onClearFocus,
+  request,
 }: {
   activity: StoreActivity;
   storeName: string;
   shopperUrl: string;
   onNavigate: (page: Page) => void;
+  /** Set when the dashboard was opened from a shopper's paid order (/?order=<id>). */
+  focusOrderId: string | null;
+  onClearFocus: () => void;
+  request: <T>(path: string) => Promise<T>;
 }) {
   const { orders, events, payouts, owed, loadError } = activity;
   const [now, setNow] = useState(() => new Date());
   const [hideHow, setHideHow] = useState(false);
+  // The asked-for order when it is older than the loaded list, or why it couldn't be shown.
+  const [focusLoaded, setFocusLoaded] = useState<CheckoutOrderView | null>(null);
+  const [focusProblem, setFocusProblem] = useState<"not_here" | "unreachable" | null>(null);
+  const focusInList = Boolean(focusOrderId && orders?.some((o) => o.id === focusOrderId));
+
+  useEffect(() => {
+    if (!focusOrderId || orders === null || focusInList) return;
+    let stale = false;
+    request<CheckoutOrderView>(`/api/v1/merchants/me/orders/${encodeURIComponent(focusOrderId)}`)
+      .then((o) => { if (!stale) { setFocusLoaded(o); setFocusProblem(null); } })
+      .catch((err: Error) => { if (!stale) setFocusProblem(err.message.startsWith("404") ? "not_here" : "unreachable"); });
+    return () => { stale = true; };
+    // Only when the asked-for order or whether the list has it changes, not on every live update.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusOrderId, orders === null, focusInList, request]);
 
   useEffect(() => {
     void Promise.resolve().then(() => setHideHow(readHidden()));
@@ -52,7 +75,8 @@ export function OverviewPage({
   }, []);
 
   const sorted = useMemo(() => [...(orders ?? [])].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)), [orders]);
-  const latest = useMemo(() => latestOrder(orders ?? []), [orders]);
+  const featured = useMemo(() => featuredOrder(orders ?? [], focusOrderId, focusLoaded), [orders, focusOrderId, focusLoaded]);
+  const focusPending = Boolean(focusOrderId && orders !== null && !featured.focused && !focusProblem);
   const stats = useMemo(() => orderStats(orders ?? []), [orders]);
   const feed = useMemo(() => activityFeed(orders ?? [], events ?? [], payouts ?? [], now), [orders, events, payouts, now]);
   const owedNet = owed?.net ?? 0;
@@ -107,10 +131,27 @@ export function OverviewPage({
 
       {loadError && <p className="rounded-md border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">{loadError}</p>}
 
-      {orders === null ? (
+      {focusOrderId && focusProblem && (
+        <p role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border bg-surface-2 px-3 py-2 text-sm">
+          <span>
+            {focusProblem === "not_here"
+              ? `That order isn't one of ${storeName}'s. If the agent bought it from another store, it shows on that store's dashboard.`
+              : "Couldn't load that order right now, so this shows the latest one."}
+          </span>
+          <button type="button" onClick={onClearFocus} className="ml-auto text-text-muted hover:text-text-primary">Dismiss</button>
+        </p>
+      )}
+
+      {orders === null || focusPending ? (
         <div className="skeleton h-56" />
-      ) : latest ? (
-        <LatestOrder order={latest} now={now} onViewAll={() => onNavigate("agent-orders")} />
+      ) : featured.order ? (
+        <LatestOrder
+          order={featured.order}
+          focused={featured.focused}
+          now={now}
+          onViewAll={() => onNavigate("agent-orders")}
+          onShowLatest={onClearFocus}
+        />
       ) : (
         <section className="glass flex flex-col items-start gap-3 p-6">
           <h2 className="text-base font-semibold">No agent orders yet</h2>
@@ -176,7 +217,7 @@ export function OverviewPage({
 const BAR: Record<ComparisonOutcome, string> = {
   won_with_rewards: "bg-success",
   won_on_price: "bg-brand-500",
-  not_chosen: "bg-surface-4",
+  not_chosen: "bg-text-muted/60",
 };
 
 function WhyAgentsPickYou({ stats, fresh, now }: { stats: AgentComparisonStats | null; fresh: boolean; now: Date }) {
@@ -229,12 +270,40 @@ function Stat({ label, value, hint }: { label: string; value: React.ReactNode; h
   );
 }
 
-function LatestOrder({ order, now, onViewAll }: { order: CheckoutOrderView; now: Date; onViewAll: () => void }) {
+function LatestOrder({
+  order,
+  focused,
+  now,
+  onViewAll,
+  onShowLatest,
+}: {
+  order: CheckoutOrderView;
+  /** Opened from the shopper's paid order: outlined, labelled, scrolled into view. */
+  focused: boolean;
+  now: Date;
+  onViewAll: () => void;
+  onShowLatest: () => void;
+}) {
   const row = toOrderRow(order);
   const tone = statusTone(order.status);
   const steps = orderLifecycle(order);
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (focused) ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [focused, order.id]);
   return (
-    <section aria-labelledby="latest" className="glass overflow-hidden">
+    <section
+      ref={ref}
+      aria-labelledby="latest"
+      className={`glass overflow-hidden ${focused ? "ring-2 ring-brand-500 ring-offset-2 ring-offset-surface-0" : ""}`}
+    >
+      {focused && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-brand-500/10 px-5 py-2 text-[13px]">
+          <span className="font-medium">Opened from the shopper</span>
+          <span className="text-text-muted">This is the order they just paid for, as your store sees it.</span>
+          <button type="button" onClick={onShowLatest} className="ml-auto text-brand-500 hover:underline">Show latest order</button>
+        </div>
+      )}
       <div className="flex flex-wrap">
         <div className="min-w-0 flex-[1_1_320px] border-b border-border bg-surface-2 p-5 md:border-b-0 md:border-r">
           <div className="rounded-lg border border-border bg-surface-1 p-4 shadow-sm">
@@ -251,7 +320,7 @@ function LatestOrder({ order, now, onViewAll }: { order: CheckoutOrderView; now:
         </div>
         <div className="flex min-w-0 flex-[1.4_1_380px] flex-col gap-4 p-5">
           <div className="flex items-center gap-2">
-            <h2 id="latest" className="text-base font-semibold">Latest agent order</h2>
+            <h2 id="latest" className="text-base font-semibold">{focused ? "Agent order" : "Latest agent order"}</h2>
             <button type="button" onClick={onViewAll} className="ml-auto rounded-md border border-border bg-surface-1 px-2.5 py-1 text-[13px] font-medium hover:bg-surface-3">All orders</button>
           </div>
           <dl className="grid grid-cols-2 gap-x-5 gap-y-3 sm:grid-cols-3">
