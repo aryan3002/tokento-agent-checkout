@@ -25,6 +25,7 @@ export function createFakePayPal() {
   const failures = new Map<string, PayPalApiError>();
   let captureStatus: PayPalCapture['status'] = 'COMPLETED';
   let capturedValueOverride: string | null = null;
+  let signatureValid = true;
 
   function record(method: string, args: unknown[]) {
     calls.push({ method, args });
@@ -148,7 +149,7 @@ export function createFakePayPal() {
 
     async verifyWebhookSignature(input: unknown): Promise<boolean> {
       record('verifyWebhookSignature', [input]);
-      return true;
+      return signatureValid;
     },
   };
 
@@ -168,9 +169,11 @@ export function createFakePayPal() {
     },
     setCaptureStatus(status: PayPalCapture['status']) { captureStatus = status; },
     setCapturedValue(value: string | null) { capturedValueOverride = value; },
+    /** What PayPal's verify-webhook-signature answers. */
+    setSignatureValid(valid: boolean) { signatureValid = valid; },
     reset() {
       orders.clear(); byRequestId.clear(); calls.length = 0; failures.clear();
-      captureStatus = 'COMPLETED'; capturedValueOverride = null;
+      captureStatus = 'COMPLETED'; capturedValueOverride = null; signatureValid = true;
     },
   };
 }
