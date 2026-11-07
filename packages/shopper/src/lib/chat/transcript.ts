@@ -41,6 +41,22 @@ export function upsertOrder(t: Transcript, order: CheckoutOrderView): Transcript
   return { ...t, entries };
 }
 
+/** Bring checkout cards already in the chat up to date (after a reload or the PayPal redirect). */
+export function syncOrders(t: Transcript, orders: CheckoutOrderView[]): Transcript {
+  const latest = new Map(orders.map((o) => [o.id, o]));
+  return {
+    ...t,
+    entries: t.entries.map((e) => {
+      const fresh = e.kind === "checkout" ? latest.get(e.order.id) : undefined;
+      return fresh ? { ...(e as Extract<Entry, { kind: "checkout" }>), order: fresh } : e;
+    }),
+  };
+}
+
+export function addNotice(t: Transcript, text: string, tone: "info" | "error"): Transcript {
+  return { ...t, entries: [...t.entries, { kind: "notice", id: nextId("n"), text, tone }] };
+}
+
 export function applyEvent(t: Transcript, e: UiEvent): Transcript {
   switch (e.type) {
     case "text": {
@@ -67,9 +83,9 @@ export function applyEvent(t: Transcript, e: UiEvent): Transcript {
     case "order":
       return upsertOrder(t, e.order);
     case "notice":
-      return { ...t, entries: [...t.entries, { kind: "notice", id: nextId("n"), text: e.text, tone: "info" }] };
+      return addNotice(t, e.text, "info");
     case "error":
-      return { ...t, entries: [...t.entries, { kind: "notice", id: nextId("n"), text: e.message, tone: "error" }] };
+      return addNotice(t, e.message, "error");
     case "history":
       return { ...t, history: e.messages };
     case "done":

@@ -141,9 +141,13 @@ function quoteSummary(q: QuoteResponse) {
   };
 }
 
-async function execute(name: ToolName, input: any, api: TokentoClient, toolUseId: string): Promise<ToolOutcome> {
-  switch (name) {
+/** A validated tool call: the input's type follows from the tool's name. */
+type ToolCall = { [K in ToolName]: { name: K; input: z.infer<(typeof inputs)[K]> } }[ToolName];
+
+async function execute(call: ToolCall, api: TokentoClient, toolUseId: string): Promise<ToolOutcome> {
+  switch (call.name) {
     case "search_products": {
+      const { input } = call;
       const { products } = await api.searchProducts({ q: input.query, maxPrice: input.max_price });
       const shown = products.slice(0, 12);
       return ok({
@@ -163,10 +167,12 @@ async function execute(name: ToolName, input: any, api: TokentoClient, toolUseId
       return ok({ rewards }, { type: "rewards", rewards });
     }
     case "compare_offers": {
+      const { input } = call;
       const quote = await api.quote({ productIds: input.product_ids, quantity: input.quantity, maxAmountToPay: input.max_amount_to_pay });
       return ok(quoteSummary(quote), { type: "offers", quote });
     }
     case "start_checkout": {
+      const { input } = call;
       // The tool call id makes a retried call idempotent: the same call can't buy twice.
       const order = await api.createOrder({
         productId: input.product_id,
@@ -183,6 +189,7 @@ async function execute(name: ToolName, input: any, api: TokentoClient, toolUseId
       return ok({ ...orderSummary(order), next_step: nextStep }, { type: "checkout", order });
     }
     case "get_order_status": {
+      const { input } = call;
       const order = await api.order(input.order_id);
       return ok(orderSummary(order), { type: "order", order });
     }
@@ -213,7 +220,7 @@ export async function runTool(name: string, rawInput: unknown, ctx: { api: Token
     return { content: JSON.stringify({ INVALID_JSON: JSON.stringify(rawInput) }), isError: true };
   }
   try {
-    return await execute(name as ToolName, parsed.data, ctx.api, ctx.toolUseId);
+    return await execute({ name, input: parsed.data } as ToolCall, ctx.api, ctx.toolUseId);
   } catch (err) {
     if (err instanceof TokentoApiError) {
       const details = err.details ? `\nDetails: ${JSON.stringify(err.details)}` : "";

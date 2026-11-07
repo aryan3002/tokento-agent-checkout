@@ -21,16 +21,18 @@ export interface StreamLike extends AsyncIterable<BetaStreamEvent> {
   finalMessage(): Promise<BetaMessage>;
 }
 
+type StreamParams = Parameters<Anthropic["beta"]["messages"]["stream"]>[0];
+
 /** The part of the Anthropic client the agent uses (a real `new Anthropic()` fits). */
 export interface ClaudeLike {
-  beta: { messages: { stream(params: any): StreamLike } };
+  beta: { messages: { stream(params: StreamParams): StreamLike } };
 }
 
 export const AGENT_MODEL = "claude-opus-5-5";
 const MAX_TOOL_ROUNDS = 8;
 const MAX_JSON_RETRIES = 2;
 
-function requestParams(messages: BetaMessageParam[]) {
+function requestParams(messages: BetaMessageParam[]): StreamParams {
   return {
     model: AGENT_MODEL,
     max_tokens: 32000,

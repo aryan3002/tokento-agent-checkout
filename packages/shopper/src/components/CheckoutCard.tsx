@@ -73,6 +73,13 @@ export function CheckoutCard({
         )}
       </dl>
 
+      {order.agentReason && (
+        <p className="mt-3 text-sm text-text-secondary">
+          <span className="folio mr-2">Why this store</span>
+          {order.agentReason}
+        </p>
+      )}
+
       {order.outsideMandate && waiting && (
         <p className="mt-3 text-sm text-warning">This is outside your spending limits, so it needs your approval in PayPal.</p>
       )}
