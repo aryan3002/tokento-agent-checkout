@@ -25,8 +25,8 @@ Built for the PayPal AI Hackathon (November 2026). It runs on PayPal's sandbox: 
 1. Open the **shopper**: https://tokento-shopper.vercel.app. Every visitor gets a fresh demo shopper (shown as Maya) with two rewards, $5 at Coffee Co. on orders of $10 or more and $3 at Ridgeline Roasters on orders of $30 or more, and spending limits of $30 per purchase and $100 a month at the three demo stores.
 2. Click **Reorder my coffee beans, under $30**. The agent searches the three stores, asks Tokento to price each offer with your rewards, and recommends the best total value with its reason. Coffee Co. wins at $28 − $5 = $23 and earns a new $5 reward, even though Harbor Bean Supply has the lowest sticker price.
 3. On the checkout card, pay with **PayPal** as a sandbox buyer. Judges: the sandbox buyer login is in the Devpost testing instructions. Anyone else can use a sandbox personal account from their own [PayPal developer dashboard](https://developer.paypal.com/dashboard/accounts).
-4. The receipt shows the reward spent, the PayPal capture id and the reward you just earned.
-5. Open the **store dashboard**: https://tokento-dashboard.vercel.app. It is Coffee Co.'s view, with no login in the demo. **Agent Orders** shows the order in a live AG Grid, with each verified PayPal webhook below it. **Payouts → Settle now** pays the store through PayPal Payouts, and the row turns *Paid out* when PayPal's signed webhook arrives (usually within a minute).
+4. The receipt shows the reward spent, the PayPal capture id and the reward you just earned. Click **See what the store sees** on it.
+5. That opens the **store dashboard** (https://tokento-dashboard.vercel.app) on your order, as Coffee Co. sees it, with each PayPal step. It is Coffee Co.'s view, with no login in the demo. **Why agents pick you** counts how often agents recommended Coffee Co. and how often its rewards beat a lower sticker price; **Agent comparisons** and **Agent orders** show each comparison and order in live AG Grids. **Payouts → Settle now** pays the store through PayPal Payouts, and the row turns *Paid out* when PayPal's signed webhook arrives (usually within a minute).
 
 Also worth trying:
 
@@ -121,11 +121,12 @@ flowchart LR
 - **Spending limits live in the API, not the prompt.** [mandate.service.ts](packages/api/src/mandates/mandate.service.ts) checks the per-purchase maximum to the cent, a monthly cap that counts open orders, the allowed stores and an expiry date. The saved PayPal is only used inside the limits; outside them the shopper approves in PayPal herself.
 - **Idempotent end to end.** PayPal request ids come from Tokento's ids, and the agent's tool-call id is the checkout's idempotency key, so a retried tool call never places a second order.
 - **Refunds give rewards back.** [refund.ts](packages/api/src/checkout/refund.ts) reissues the spent reward as a new signed token and voids the earned one if it hasn't been spent. If it has, the refund still goes through and that reward is kept, with a note.
-- **Agent guardrails.** The loop ([loop.ts](packages/shopper/src/lib/agent/loop.ts), [tools.ts](packages/shopper/src/lib/agent/tools.ts)) uses strict function tools checked with Zod, an 8-round cap, refusal handling, and `store: false` with the encrypted reasoning passed back each turn. A spend guard ([usage-guard.ts](packages/shopper/src/lib/agent/usage-guard.ts)) caps model cost per day, per request and per shopper, on top of the Azure deployment's tokens-per-minute limit.
+- **Agent guardrails.** The loop ([loop.ts](packages/shopper/src/lib/agent/loop.ts), [tools.ts](packages/shopper/src/lib/agent/tools.ts)) uses strict function tools checked with Zod, an 8-round cap, refusal handling, and `store: false` with the encrypted reasoning passed back each turn. A spend guard caps model cost per day, per request and per shopper ([usage-guard.ts](packages/shopper/src/lib/agent/usage-guard.ts)). With `AGENT_USAGE_KEY` set on the API and the shopper, the daily budget and hourly limit are counted once in the API's Redis for every server instance ([shared-usage.ts](packages/shopper/src/lib/agent/shared-usage.ts), [agent-usage.service.ts](packages/api/src/agent-usage/agent-usage.service.ts)), and the shopper refuses a request when the guard can't be checked. The Azure deployment's tokens-per-minute cap sits underneath.
+- **The real agent is tested, not just the code around it.** [Agent evals](packages/shopper/evals/README.md) run the hosted model through eight scenarios, each with a fresh demo shopper: a reorder with and without chat history, a second purchase in the same chat, a named store, a budget nothing fits, a purchase over the limits, and a product description that tries to take over the agent. They check what it did with Tokento (stores compared, checkouts started) and that it never wrote a dollar amount a tool didn't return or said "paid" early. Latest: [24 of 24 runs](packages/shopper/evals/RESULTS.md). Their first run caught a real bug: catalog search needed every word, so "medium roast whole beans 2lb" found nothing.
 
 ### Tests
 
-324 tests pass: API 211, shopper 53, PayPal client 28, dashboard 26, MCP adapter 6. The checkout tests are integration tests against a real Postgres, with only PayPal faked at its HTTP boundary ([fake-paypal-client.ts](packages/api/tests/helpers/fake-paypal-client.ts)). `pnpm test` builds and runs everything, and CI runs typecheck, lint and the suite on pull requests to `main`.
+415 tests pass: API 247, shopper 79, dashboard 46, PayPal client 28, MCP adapter 15. The checkout tests are integration tests against a real Postgres, with only PayPal faked at its HTTP boundary ([fake-paypal-client.ts](packages/api/tests/helpers/fake-paypal-client.ts)). `pnpm test` builds and runs everything, and CI runs typecheck, lint and the suite on pull requests to `main`.
 
 The riskiest paths each have a named test:
 
@@ -140,20 +141,26 @@ The riskiest paths each have a named test:
 | Limit edges | "allows exactly the per-purchase maximum and refuses one cent over" in [mandates.test.ts](packages/api/tests/mandates.test.ts) |
 | Saved PayPal outside the limits | "never uses the saved PayPal outside the limits: refused, or a normal approval if the shopper agrees" in [mandates.test.ts](packages/api/tests/mandates.test.ts) |
 | Refund after the store was paid | "nets a refund made after the store was paid against the next batch" in [settlement.test.ts](packages/api/tests/settlement.test.ts) |
+| A store seeing a competitor's numbers | "sends each store its own comparison outcome and nothing about the others" and "lists this store's own lines … no other store's data" in [agent-comparisons.test.ts](packages/api/tests/agent-comparisons.test.ts) |
+| A shopper session draining the demo's AI budget | "refuse callers without the right key" in [agent-usage.test.ts](packages/api/tests/agent-usage.test.ts) |
 
 ## Design
 
 **Shopper app.** One conversation does the whole job.
 
 - The agent's steps show as small chips ("Searching the stores", "Comparing offers with your rewards"), and its reasoning summary appears as a progress line, so the shopper can see what it is doing.
-- Offers come back as a table: price, reward, PayPal amount, reward earned back and net cost, with the best value marked and the agent's reason in plain words.
-- The checkout card shows the math line by line, why this store, and the PayPal button. Once paid it becomes the receipt, with PayPal's capture id.
+- Offers come back as a table: price, reward, PayPal amount, reward earned back and net cost, with the best value marked and the agent's reason in plain words. On a phone each store becomes a short block with every number visible.
+- The checkout card shows the math line by line, why this store, and the PayPal button. Once paid it becomes the receipt, with PayPal's capture id and a **See what the store sees** link that opens the store dashboard on that same order.
 - Side panels show the spending limits (with **Link PayPal once**), the rewards wallet and recent agent orders. The chat is saved per shopper, and coming back from PayPal returns to the same conversation.
 
 **Store dashboard.** A Geist-style layout in light and dark (it follows the system setting, or the switch in the sidebar), written so a store owner with no payments background can follow it.
 
 - **Overview**: a three-step "how it works" strip, the latest agent order as the shopper saw it with each PayPal step spelled out ("Shopper approved in PayPal", "PayPal confirmed the payment", "Paid out to you"), four numbers that each say what they mean, recent orders, and an activity feed that says who did what. See [OverviewPage.tsx](packages/dashboard/src/app/components/OverviewPage.tsx) and its logic in [overview-data.ts](packages/dashboard/src/app/components/overview-data.ts).
+- **Why agents pick you** (Overview card): "Recommended in 3 of 4 agent comparisons. In 2 of them, your rewards beat a lower sticker price." It updates while an agent is still comparing. A store sees only its own numbers, never another store's name or price.
 - **Agent orders** (AG Grid Community): rows arrive and update live with `applyTransaction` from the server-sent event stream, changed cells flash, a pinned row totals paid orders, statuses show as a dot plus words, and each row says why the agent chose the store. Refund from the row. See [AgentOrdersTab.tsx](packages/dashboard/src/app/components/AgentOrdersTab.tsx).
+- **Agent comparisons** (AG Grid): one row per time an agent compared the store with others: its item and price, the real cost to the shopper after rewards, how many stores were compared, and whether it won with rewards, won on price or wasn't chosen. New rows slide in live. See [ComparisonsTab.tsx](packages/dashboard/src/app/components/ComparisonsTab.tsx).
+- Every grid has quick search, **Download CSV** and **Reset columns**, and remembers how the store arranged its columns in that browser through AG Grid's state API ([GridToolbar.tsx](packages/dashboard/src/app/components/GridToolbar.tsx)).
+- Opened from a shopper's paid order (`/?order=<id>`), the Overview features that exact order, outlined and labelled, with a plain note if it belongs to another store.
 - **Payouts** (AG Grid): what the store is owed, a Settle now button, and one row per PayPal Payouts batch with its live status. See [PayoutsTab.tsx](packages/dashboard/src/app/components/PayoutsTab.tsx).
 - **PayPal activity**: every verified PayPal message about the store's orders. See [PayPalEventsFeed.tsx](packages/dashboard/src/app/components/PayPalEventsFeed.tsx).
 - A sidebar with quick find (press F) that collapses to icons; developer pages (connecting an agent, webhooks, system status) sit in their own group. See [Sidebar.tsx](packages/dashboard/src/app/components/Sidebar.tsx).
@@ -170,6 +177,8 @@ When an AI agent shops on price, loyalty breaks. Rewards the shopper already ear
 - **Stores** compete on total value instead of sticker price alone, see every agent order live and get paid through PayPal Payouts.
 - **PayPal** gets agent purchases that run end to end on its rails: Orders, Vault for delegated payments within limits, Refunds and Payouts.
 
+The dashboard shows a store the proof in its own numbers: how often shopping agents recommended it when they compared stores, and how often its rewards were the reason it won against a lower sticker price.
+
 The wallet behind it is a working loyalty API with a three-endpoint query interface, so the same rewards can serve any agent, through any protocol.
 
 ## Innovation
@@ -177,7 +186,8 @@ The wallet behind it is a working loyalty API with a three-endpoint query interf
 - **Rewards are part of the agent's decision.** "Best total value" means price, minus the reward usable now, with the reward this purchase earns shown next to it, all priced by the server. The model chooses and explains; it never computes money.
 - **Delegated payment with hard limits.** The shopper sets limits once and links PayPal once. The API, not the prompt, enforces the limits, and anything outside them goes back to the shopper for her own PayPal approval.
 - **Both sides of the purchase, on PayPal rails.** The reward is held during approval, the order is finalized exactly once from either the capture or the verified webhook, the store is paid through Payouts net of fees and refunds, and a refund gives the reward back.
-- **Protocol-agnostic underneath.** The shopper agent reads rewards through the same three-endpoint Token Query Interface that the MCP adapter exposes, so a new agent protocol is an adapter, not a rewrite.
+- **Protocol-agnostic underneath.** The shopper agent reads rewards through the same three-endpoint Token Query Interface that the MCP adapter exposes, so a new agent protocol is an adapter, not a rewrite. The MCP adapter also offers agent checkout, so an outside agent such as Claude Desktop can compare stores and start a PayPal checkout with the same server-side pricing and limits.
+- **Agent decisions become a store metric.** Every comparison records which store the agent recommended and whether rewards decided it, so a store can see what its loyalty program is worth when agents shop.
 
 ## Presentation
 
@@ -229,7 +239,7 @@ Everything after commit `66c96b1` was built during the hackathon. List it with `
 
 **Already there at `66c96b1`:** Tokento's loyalty API (HMAC-signed rewards, the platform wallet, the three-endpoint Token Query Interface, merchant configuration, outgoing webhooks, expiry sweeper), the MCP adapter, the store dashboard's original tabs and the checkout widget.
 
-**Built during the hackathon:** the PayPal client package, agent checkout (pricing, quotes, holds, capture and finalize, verified webhooks, refunds, the sweeper), spending limits with PayPal Vault, Payouts settlement, the shopper app and its agent, the dashboard's Agent Orders, PayPal webhook feed and Payouts tabs, and the hosted demo.
+**Built during the hackathon:** the PayPal client package, agent checkout (pricing, quotes, holds, capture and finalize, verified webhooks, refunds, the sweeper), spending limits with PayPal Vault, Payouts settlement, the shopper app and its agent, agent evals, the dashboard's Agent Orders, Agent Comparisons, PayPal webhook feed and Payouts pages, the shared spend guard, the MCP checkout tools, and the hosted demo.
 
 <details>
 <summary>Commits after 66c96b1, oldest first</summary>
@@ -277,12 +287,13 @@ Later commits (this README onward) are in `git log`.
 
 - **Sandbox only.** `PAYPAL_ENV` is `sandbox`; no real money moves.
 - **No real login in the hosted demo.** Each browser gets a signed demo shopper for 7 days. The store dashboard has no login and acts as Coffee Co. for everyone, so anyone with the URL can refund or settle Coffee Co.'s sandbox orders. Stytch-based sign-in exists in the code but is off in the demo.
-- **The agent's spend guard is soft on Vercel.** Its daily, per-request and per-shopper caps are kept in each server instance's memory, and Vercel can run several instances. The Azure deployment's tokens-per-minute cap is the hard limit.
-- **The agent can lean on memory.** With chat history, it sometimes compares only the store it bought from last time. Asking it to compare all stores fixes it.
+- **The agent's spend guard is shared only with `AGENT_USAGE_KEY`.** Without that key on both the API and the shopper, each Vercel instance counts the daily and hourly caps on its own. The per-request cap is per instance by design, and the Azure deployment's tokens-per-minute cap is the hard limit either way.
+- **The agent is still a language model.** The evals pass 24 of 24 runs, but a run can go differently. Every money action is checked on the server regardless: prices, holds, limits and the PayPal amount.
+- **Agent comparisons count every quote of two or more stores,** including a second quote in the same conversation.
 - **Rewards are per store.** Spending one store's reward at another store is on the roadmap, not built.
 - **Payouts run when the store clicks Settle now.** There is no scheduled settlement in the demo.
 - **Refunds** are covered by integration tests; the live sandbox runs so far covered purchases, Link PayPal once and Payouts.
-- **The MCP adapter** exposes the three wallet tools. Checkout over MCP is not built.
+- **The MCP adapter** (wallet and checkout tools) is tested and was run end to end against a local API, but the hosted demo doesn't run the MCP Worker: run it locally with Wrangler and `mcp-proxy.js`.
 - **Carried over from the platform:** one API replica, Redis as a cache only, no transactional outbox for outgoing store webhooks, no HMAC key rotation, and rate limits as the only fraud control.
 
 ## The Tokento platform underneath
