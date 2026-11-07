@@ -1,0 +1,17 @@
+# The hosted shopper and dashboard deploy to Vercel from the repo root (each Vercel
+# project's Root Directory is its package), so pnpm can install the workspace.
+# Never upload secrets or local build output.
+.env
+.env.*
+!.env.example
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+**/coverage
+**/*.tsbuildinfo
+.git
+.vercel
+.superpowers
+.worktrees
+*.log

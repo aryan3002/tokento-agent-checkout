@@ -31,3 +31,6 @@ Thumbs.db
 
 # Cloudflare Wrangler
 .wrangler/
+
+# Vercel CLI link folder
+.vercel
