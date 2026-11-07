@@ -18,11 +18,11 @@ export function azureBaseUrl(endpoint: string): string {
 }
 
 export function readAgentConfig(env: Record<string, string | undefined>): AzureAgentConfig | null {
-  const endpoint = env.AZURE_OPENAI_ENDPOINT?.trim();
-  const apiKey = env.AZURE_OPENAI_API_KEY?.trim();
-  const deployment = env.AZURE_OPENAI_DEPLOYMENT?.trim();
+  const endpoint = env.TOKENTO_AZURE_OPENAI_ENDPOINT?.trim();
+  const apiKey = env.TOKENTO_AZURE_OPENAI_API_KEY?.trim();
+  const deployment = env.TOKENTO_AZURE_OPENAI_DEPLOYMENT?.trim();
   if (!endpoint || !apiKey || !deployment) return null;
-  const effort = env.AZURE_OPENAI_REASONING_EFFORT?.trim().toLowerCase();
+  const effort = env.TOKENTO_AZURE_OPENAI_REASONING_EFFORT?.trim().toLowerCase();
   const reasoningEffort = effort === "none" ? null : (EFFORTS as readonly string[]).includes(effort ?? "") ? (effort as AgentModelConfig["reasoningEffort"]) : "low";
   return { endpoint, apiKey, deployment, reasoningEffort };
 }

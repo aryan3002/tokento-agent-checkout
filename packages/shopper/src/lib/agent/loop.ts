@@ -11,6 +11,7 @@ import type { TokentoClient } from "../tokento";
 import type { AgentHistory, UiEvent } from "./events";
 import { SYSTEM_PROMPT } from "./prompt";
 import { AGENT_TOOLS, runTool } from "./tools";
+import type { ModelUsage } from "./usage-guard";
 
 export type { AgentHistory, UiEvent } from "./events";
 
@@ -44,7 +45,8 @@ function requestParams(input: AgentHistory, config: AgentModelConfig): StreamPar
     parallel_tool_calls: true,
     store: false,
     stream: true,
-    max_output_tokens: 16000,
+    // Reasoning plus a short reply fit easily; a cap keeps one call from running up the bill.
+    max_output_tokens: 6000,
     // Reasoning summaries become the short progress lines in the chat.
     ...(config.reasoningEffort
       ? { reasoning: { effort: config.reasoningEffort, summary: "auto" as const }, include: ["reasoning.encrypted_content" as const] }
@@ -62,7 +64,13 @@ function parseArguments(raw: string): unknown {
 }
 
 export async function* runAgentTurn(
-  deps: { model: ModelClient; config: AgentModelConfig; api: TokentoClient },
+  deps: {
+    model: ModelClient;
+    config: AgentModelConfig;
+    api: TokentoClient;
+    /** Charges each model call; `stop` ends the request before any more tool rounds. */
+    meter?: (usage: ModelUsage) => { stop: boolean };
+  },
   history: AgentHistory,
   userText: string,
   opts: { maxToolRounds?: number } = {},
@@ -111,6 +119,7 @@ export async function* runAgentTurn(
     }
 
     const calls = response.output.filter((item): item is FunctionCall => item.type === "function_call");
+    const overBudget = response.usage && deps.meter ? deps.meter(response.usage).stop : false;
 
     if (refused) {
       // Never run a tool from a reply the model refused, and don't keep that reply.
@@ -121,6 +130,13 @@ export async function* runAgentTurn(
     if (response.status === "incomplete" && calls.length > 0) {
       yield { type: "notice", text: "That got too long for me to finish. Try a simpler request." };
       stopReason = "max_tokens";
+      break;
+    }
+
+    if (overBudget && calls.length > 0) {
+      // Its tool calls never run, so this reply isn't kept (a call without a result can't be sent back).
+      yield { type: "notice", text: "I stopped here because this request reached its usage limit. Ask again to continue." };
+      stopReason = "usage_limit";
       break;
     }
 

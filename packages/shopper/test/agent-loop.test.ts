@@ -264,6 +264,32 @@ describe("runAgentTurn", () => {
     }
   });
 
+  it("stops before running more tools once the request reaches its usage limit", async () => {
+    const first = response([call("call_1", "search_products", { query: "coffee", max_price: null })]);
+    (first as unknown as { usage: unknown }).usage = { input_tokens: 9000, input_tokens_details: { cached_tokens: 0 }, output_tokens: 900 };
+    const { model, requests } = fakeModel([first, response([say("Done.")])]);
+    const { api, calls } = fakeApi({ "GET /catalog/search": () => ({ status: 200, body: searchResult }) });
+    const charged: unknown[] = [];
+
+    const events = await collect(runAgentTurn({ model, config, api, meter: (u) => (charged.push(u), { stop: true }) }, [], "Find coffee"));
+
+    expect(charged).toHaveLength(1);
+    expect(requests).toHaveLength(1);
+    expect(calls).toHaveLength(0);
+    expect(events).toContainEqual(expect.objectContaining({ type: "notice", text: expect.stringContaining("usage limit") }));
+    expect(kinds(historyOf(events))).toEqual(["user"]);
+    expect(events.at(-1)).toEqual({ type: "done", stopReason: "usage_limit" });
+  });
+
+  it("asks for short replies so one request can't run up the bill", async () => {
+    const { model, requests } = fakeModel([response([say("Hi.")])]);
+    const { api } = fakeApi();
+
+    await collect(runAgentTurn({ model, config, api }, [], "Hi"));
+
+    expect(requests[0].max_output_tokens).toBeLessThanOrEqual(6000);
+  });
+
   it("leaves reasoning out for a deployment that doesn't support it", async () => {
     const { model, requests } = fakeModel([response([say("Hi.")])]);
     const { api } = fakeApi();
