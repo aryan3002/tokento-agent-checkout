@@ -127,6 +127,12 @@ describe('plain-language reasons', () => {
     expect(text).toContain('Coffee Co.');
   });
 
+  it('ends a sentence with one period when the store name already has one', () => {
+    const text = describeOffer({ merchantName: 'Coffee Co.', subtotal: D(28), price: coffee, hasRewardsProgram: true });
+    expect(text).toContain('reward at Coffee Co.');
+    expect(text).not.toContain('..');
+  });
+
   it('says why a reward could not be used', () => {
     const text = describeOffer({ merchantName: 'Ridgeline Roasters', subtotal: D('26.50'), price: ridgeline, hasRewardsProgram: true });
     expect(text).toContain('$30.00');

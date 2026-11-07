@@ -272,8 +272,8 @@ export function ShopperApp() {
         </div>
       )}
 
-      <main className="mx-auto grid max-w-6xl gap-8 px-4 pt-6 md:grid-cols-[minmax(0,1fr)_320px]">
-        <section className="flex min-h-[calc(100vh-8rem)] flex-col" aria-label="Chat with the shopping agent">
+      <main className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)] gap-8 px-4 pt-6 md:grid-cols-[minmax(0,1fr)_320px]">
+        <section className="flex min-h-[calc(100vh-8rem)] min-w-0 flex-col" aria-label="Chat with the shopping agent">
           <div role="log" aria-live="polite" className="flex-1 space-y-4">
             {transcript.entries.length === 0 && (
               <div className="animate-slide-up max-w-2xl pt-8">
@@ -355,7 +355,7 @@ export function ShopperApp() {
           </form>
         </section>
 
-        <div className="space-y-6 md:sticky md:top-16 md:self-start">
+        <div className="min-w-0 space-y-6 md:sticky md:top-16 md:self-start">
           <MandatePanel data={limits} onChanged={() => void refreshSidebar()} />
           <WalletPanel name={name ?? "Your"} rewards={rewards} totalValue={totalValue} orders={orders} />
         </div>

@@ -105,6 +105,9 @@ export function usd(value: Decimal | number): string {
 }
 
 /** One store's offer in plain words, using only numbers from priceOffer. */
+/** A sentence ending in a name like "Coffee Co." keeps its one period. */
+const endSentence = (text: string) => (text.endsWith('.') ? text : `${text}.`);
+
 export function describeOffer(input: {
   merchantName: string;
   subtotal: Decimal;
@@ -125,7 +128,7 @@ export function describeOffer(input: {
   }
 
   if (price.earn) {
-    parts.push(`This order earns a new ${usd(price.earn.amount)} reward at ${merchantName}.`);
+    parts.push(endSentence(`This order earns a new ${usd(price.earn.amount)} reward at ${merchantName}`));
   } else if (!input.hasRewardsProgram) {
     parts.push(`${merchantName} has no rewards program on Tokento.`);
   } else {
