@@ -15,3 +15,5 @@
 .superpowers
 .worktrees
 *.log
+# Demo video sources and renders (not needed to build the apps)
+docs/demo-video
