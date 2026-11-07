@@ -6,8 +6,8 @@
 // cancel:  release the hold before any money moves.
 // Capture, refunds and webhooks build on these rows (see finalize.ts, refund.ts).
 import { Prisma } from '@prisma/client';
-import { approvalUrlOf, PayPalApiError, toPayPalAmount } from '@tokento/paypal';
-import { CheckoutStatus, EventType, TokenStatus, type CheckoutOrderView } from '@tokento/shared';
+import { approvalUrlOf, captureOf, PayPalApiError, toPayPalAmount, type PayPalOrder } from '@tokento/paypal';
+import { CheckoutStatus, EventType, type CheckoutOrderView } from '@tokento/shared';
 import prisma from '../db/client';
 import { emitEvent } from '../events/emitter';
 import { AppError } from '../middleware/error.middleware';
@@ -15,11 +15,12 @@ import { mandateService } from '../mandates/mandate.service';
 import { validationService } from '../services/validation.service';
 import { logger } from '../utils/logger';
 import { toMoneyNumber } from '../utils/money';
+import { finalizeLocked, type FinalizeSource } from './finalize';
 import { withOrderLock } from './order-lock';
 import { getPayPal, shopperAppUrl } from './paypal';
 import { activeRules, assertQuantity, availableRewards, loadProducts, priceProduct, type ProductWithMerchant } from './quote.service';
 import type { OfferPrice } from './pricing';
-import { ORDER_INCLUDE, toOrderView, type OrderWithRelations } from './views';
+import { loadOrderView, ORDER_INCLUDE, orderView, type OrderWithRelations } from './views';
 
 export interface CreateCheckoutInput {
   productId: string;
@@ -40,7 +41,16 @@ export type CheckoutPrincipal =
   | { kind: 'customer'; customerId: string }
   | { kind: 'merchant'; merchantId: string };
 
+/** Who may trigger a capture: the shopper after approving, or the server (webhook, sweeper). */
+export type CapturePrincipal = { kind: 'customer'; customerId: string } | { kind: 'system'; source: FinalizeSource };
+
 const CANCELLABLE: string[] = [CheckoutStatus.PENDING, CheckoutStatus.CREATED, CheckoutStatus.APPROVED];
+const CAPTURABLE: string[] = [CheckoutStatus.CREATED, CheckoutStatus.APPROVED];
+/** Already past capture: a repeated capture call just returns the order. */
+const ALREADY_CAPTURED: string[] = [
+  CheckoutStatus.CAPTURE_PENDING, CheckoutStatus.COMPLETED, CheckoutStatus.NEEDS_REVIEW,
+  CheckoutStatus.REFUND_PENDING, CheckoutStatus.REFUNDED,
+];
 const HOLD_ATTEMPTS = 3;
 
 function isUniqueViolation(err: unknown, field: string): boolean {
@@ -196,6 +206,65 @@ export class CheckoutService {
     }
   }
 
+  /**
+   * Capture an approved order and finalize it, all under the order lock so a
+   * cancel can't land between PayPal taking the money and us recording it.
+   */
+  async capture(checkoutId: string, principal: CapturePrincipal): Promise<CheckoutOrderView> {
+    const source: FinalizeSource = principal.kind === 'system' ? principal.source : 'capture_response';
+    const after = await withOrderLock(checkoutId, async (tx) => {
+      const order = await tx.checkoutOrder.findUnique({ where: { id: checkoutId } });
+      if (!order) throw new AppError(404, 'checkout_not_found', 'Checkout order not found.');
+      if (principal.kind === 'customer' && order.customerId !== principal.customerId) {
+        throw new AppError(403, 'forbidden', 'This order belongs to another shopper.');
+      }
+      if (ALREADY_CAPTURED.includes(order.status)) return [];
+      if (order.status === CheckoutStatus.CAPTURED && order.paypalCaptureId) {
+        // A crash after the capture was recorded: finish the remaining steps.
+        return finalizeLocked(tx, checkoutId, {
+          captureId: order.paypalCaptureId, status: 'COMPLETED', amount: order.amountToPay.toFixed(2), currency: order.currency,
+        }, source);
+      }
+      if (!CAPTURABLE.includes(order.status) || !order.paypalOrderId) {
+        throw new AppError(409, 'not_capturable', `Order is ${order.status.toLowerCase()} and cannot be captured.`);
+      }
+
+      const paypal = getPayPal();
+      let ppOrder: PayPalOrder;
+      try {
+        ppOrder = await paypal.captureOrder(order.paypalOrderId, { requestId: `capture:${order.id}` });
+      } catch (err) {
+        if (!(err instanceof PayPalApiError)) throw err;
+        if (err.hasIssue('ORDER_ALREADY_CAPTURED')) {
+          ppOrder = await paypal.getOrder(order.paypalOrderId);
+        } else if (err.hasIssue('ORDER_NOT_APPROVED')) {
+          throw new AppError(409, 'not_approved', 'The shopper has not approved this payment in PayPal yet.');
+        } else if (err.hasIssue('INSTRUMENT_DECLINED')) {
+          throw new AppError(402, 'payment_declined', 'PayPal declined the funding source. Ask the shopper to approve again with another way to pay.', {
+            approvalUrl: order.approvalUrl,
+          });
+        } else {
+          throw new AppError(502, 'paypal_unavailable', 'PayPal could not capture the payment. Try again.', {
+            paypalError: err.name,
+            debugId: err.debugId,
+          });
+        }
+      }
+
+      const capture = captureOf(ppOrder);
+      if (!capture) throw new AppError(502, 'paypal_unexpected', 'PayPal did not return a capture for this order.');
+      return finalizeLocked(tx, checkoutId, {
+        captureId: capture.id,
+        status: capture.status,
+        amount: capture.amount.value,
+        currency: capture.amount.currency_code,
+      }, source);
+    });
+
+    for (const run of after) run();
+    return loadOrderView(checkoutId);
+  }
+
   async cancel(customerId: string, checkoutId: string): Promise<CheckoutOrderView> {
     const outcome = await withOrderLock(checkoutId, async (tx) => {
       const order = await tx.checkoutOrder.findUnique({ where: { id: checkoutId } });
@@ -261,13 +330,8 @@ export class CheckoutService {
     });
   }
 
-  async view(order: OrderWithRelations): Promise<CheckoutOrderView> {
-    let earnedTokenStatus: string | undefined;
-    if (order.status === CheckoutStatus.REFUNDED && order.earnedTokenId) {
-      const token = await prisma.token.findUnique({ where: { id: order.earnedTokenId }, select: { status: true } });
-      earnedTokenStatus = token?.status ?? TokenStatus.VOIDED;
-    }
-    return toOrderView(order, { earnedTokenStatus });
+  view(order: OrderWithRelations): Promise<CheckoutOrderView> {
+    return orderView(order);
   }
 }
 

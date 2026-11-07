@@ -28,7 +28,8 @@ export class ValidationService {
   async validate(
     tokenId: string,
     data: ValidateTokenRequest,
-    isSandbox: boolean
+    isSandbox: boolean,
+    opts: { asOf?: Date } = {},
   ): Promise<ValidateTokenResponse> {
     const token = await prisma.token.findUnique({
       where: { id: tokenId },
@@ -79,8 +80,10 @@ export class ValidationService {
       };
     }
 
-    // Check expiry
-    if (new Date() > token.expiryAt) {
+    // Check expiry. `asOf` lets a checkout honour a reward it held before the
+    // reward expired (internal callers only; the TQI always validates as of now).
+    const asOf = opts.asOf ?? new Date();
+    if (asOf > token.expiryAt) {
       // Auto-mark as expired
       await prisma.token.update({
         where: { id: tokenId },

@@ -3,6 +3,7 @@
 // calls Tokento makes: orders need buyer approval before capture, a second
 // capture fails with ORDER_ALREADY_CAPTURED, and a repeated PayPal-Request-Id
 // returns the first result instead of acting twice.
+import { randomUUID } from 'crypto';
 import { PayPalApiError } from '@tokento/paypal';
 import type { CreateOrderInput, PayPalCapture, PayPalOrder, PayPalRefund } from '@tokento/paypal';
 
@@ -14,6 +15,9 @@ interface FakeOrder {
 }
 
 export function createFakePayPal() {
+  // Test files run in parallel against one database, and PayPal ids are unique
+  // columns there, so every fake instance mints ids under its own prefix.
+  const prefix = randomUUID().slice(0, 8).toUpperCase();
   let seq = 0;
   const orders = new Map<string, FakeOrder>();
   const byRequestId = new Map<string, unknown>();
@@ -51,7 +55,7 @@ export function createFakePayPal() {
   function makeCapture(o: FakeOrder): PayPalCapture {
     seq += 1;
     return {
-      id: `CAPTURE-${seq}`,
+      id: `CAPTURE-${prefix}-${seq}`,
       status: captureStatus,
       amount: { currency_code: 'USD', value: capturedValueOverride ?? o.input.amount },
       custom_id: o.input.customId,
@@ -69,7 +73,7 @@ export function createFakePayPal() {
       const prior = byRequestId.get(`create:${opts.requestId}`);
       if (prior) return orderView(prior as FakeOrder);
       seq += 1;
-      const order: FakeOrder = { id: `PAYPAL-ORDER-${seq}`, status: 'PAYER_ACTION_REQUIRED', input };
+      const order: FakeOrder = { id: `PAYPAL-ORDER-${prefix}-${seq}`, status: 'PAYER_ACTION_REQUIRED', input };
       if (input.payment.kind === 'vault') {
         order.status = 'COMPLETED';
         order.capture = makeCapture(order);
@@ -109,7 +113,7 @@ export function createFakePayPal() {
       const prior = byRequestId.get(`refund:${opts.requestId}`);
       if (prior) return prior as PayPalRefund;
       seq += 1;
-      const refund: PayPalRefund = { id: `REFUND-${seq}`, status: 'COMPLETED' };
+      const refund: PayPalRefund = { id: `REFUND-${prefix}-${seq}`, status: 'COMPLETED' };
       byRequestId.set(`refund:${opts.requestId}`, refund);
       return refund;
     },
@@ -119,7 +123,7 @@ export function createFakePayPal() {
       seq += 1;
       return {
         batch_header: {
-          payout_batch_id: `PAYOUT-${seq}`,
+          payout_batch_id: `PAYOUT-${prefix}-${seq}`,
           batch_status: 'PENDING' as const,
           sender_batch_header: { sender_batch_id: input.senderBatchId },
         },
@@ -134,7 +138,7 @@ export function createFakePayPal() {
     async createSetupToken(input: unknown, opts: { requestId: string }) {
       record('createSetupToken', [input, opts]);
       seq += 1;
-      return { id: `SETUP-${seq}`, status: 'PAYER_ACTION_REQUIRED', links: [{ href: `https://www.sandbox.paypal.com/agreements/approve?approval_session_id=S${seq}`, rel: 'approve' }] };
+      return { id: `SETUP-${prefix}-${seq}`, status: 'PAYER_ACTION_REQUIRED', links: [{ href: `https://www.sandbox.paypal.com/agreements/approve?approval_session_id=S${seq}`, rel: 'approve' }] };
     },
 
     async createPaymentToken(setupTokenId: string, opts: { requestId: string }) {

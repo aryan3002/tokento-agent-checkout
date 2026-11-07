@@ -30,6 +30,13 @@ export interface RedeemOptions {
    * rejects any call site that forgets to pass it.
    */
   authenticatedCustomerId: string;
+  /**
+   * Internal: the checkout order redeeming its own held reward. Any other caller
+   * is refused while an order holds the token.
+   */
+  checkoutOrderId?: string;
+  /** Internal: validate expiry as of this moment (when the checkout held the reward). */
+  asOf?: Date;
 }
 
 export class RedemptionService {
@@ -56,12 +63,22 @@ export class RedemptionService {
       };
     }
 
+    // A reward held by an open checkout belongs to that checkout until it is
+    // paid or cancelled; spending it elsewhere would double-apply the discount.
+    const hold = await prisma.checkoutOrder.findUnique({
+      where: { rewardTokenId: tokenId },
+      select: { id: true },
+    });
+    if (hold && hold.id !== opts.checkoutOrderId) {
+      throw new AppError(409, 'token_held', 'This reward is reserved by a checkout that is waiting for payment.', { tokenId });
+    }
+
     // Re-validate
     const validation = await validationService.validate(tokenId, {
       transactionAmount: data.transactionAmount,
       merchantId: data.merchantId,
       agentId: data.agentId,
-    }, opts.isSandbox);
+    }, opts.isSandbox, { asOf: opts.asOf });
 
     if (!validation.valid) {
       throw new AppError(400, 'validation_failed', `Token validation failed: ${validation.reasonMessage}`, { reasonCode: validation.reasonCode, tokenId });
@@ -74,8 +91,10 @@ export class RedemptionService {
     // share one scope. updateMany returns a count instead of throwing P2025, so a lost
     // race surfaces as a 409 the caller can act on rather than a 500 it will retry.
     const redemption = await prisma.$transaction(async (tx) => {
+      // A held reward may have been swept to EXPIRED after the hold; the checkout
+      // still honours it (validated above as of the hold time).
       const updated = await tx.token.updateMany({
-        where: { id: tokenId, status: TokenStatus.ACTIVE },
+        where: { id: tokenId, status: opts.asOf ? { in: [TokenStatus.ACTIVE, TokenStatus.EXPIRED] } : TokenStatus.ACTIVE },
         data: { status: TokenStatus.REDEEMED, redeemedAt: new Date() },
       });
 

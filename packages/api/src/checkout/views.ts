@@ -3,6 +3,7 @@
 // ============================================================
 import type { CheckoutOrder, SettlementBatch } from '@prisma/client';
 import { CheckoutStatus, type CheckoutOrderView, type PaymentMode, type SettlementState, TokenStatus } from '@tokento/shared';
+import prisma from '../db/client';
 import { toMoneyNumber } from '../utils/money';
 import { usd } from './pricing';
 
@@ -112,4 +113,19 @@ export function toOrderView(o: OrderWithRelations, opts: { earnedTokenStatus?: s
     completedAt: o.completedAt?.toISOString() ?? null,
     refundedAt: o.refundedAt?.toISOString() ?? null,
   };
+}
+
+/** View of an order, looking up the earned reward's status when a refund may have voided it. */
+export async function orderView(order: OrderWithRelations): Promise<CheckoutOrderView> {
+  let earnedTokenStatus: string | undefined;
+  if (order.status === CheckoutStatus.REFUNDED && order.earnedTokenId) {
+    const token = await prisma.token.findUnique({ where: { id: order.earnedTokenId }, select: { status: true } });
+    earnedTokenStatus = token?.status ?? TokenStatus.VOIDED;
+  }
+  return toOrderView(order, { earnedTokenStatus });
+}
+
+export async function loadOrderView(checkoutId: string): Promise<CheckoutOrderView> {
+  const order = await prisma.checkoutOrder.findUniqueOrThrow({ where: { id: checkoutId }, include: ORDER_INCLUDE });
+  return orderView(order);
 }

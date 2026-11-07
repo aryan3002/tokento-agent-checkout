@@ -14,6 +14,9 @@ const mocks = vi.hoisted(() => {
       update: vi.fn(),
       updateMany: vi.fn(),
     },
+    checkoutOrder: {
+      findUnique: vi.fn(async () => null),
+    },
     $transaction: vi.fn(),
   };
 

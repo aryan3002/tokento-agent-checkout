@@ -297,6 +297,8 @@ export enum EventType {
   CHECKOUT_COMPLETED = 'checkout.completed',
   CHECKOUT_REFUNDED = 'checkout.refunded',
   CHECKOUT_CANCELLED = 'checkout.cancelled',
+  /** Any other status change: capture pending, needs review, failed. */
+  CHECKOUT_UPDATED = 'checkout.updated',
   SETTLEMENT_CREATED = 'settlement.created',
   SETTLEMENT_UPDATED = 'settlement.updated',
   PAYPAL_WEBHOOK = 'paypal.webhook',
