@@ -31,6 +31,7 @@ import checkoutRoutes from './routes/checkout.routes';
 import catalogRoutes from './routes/catalog.routes';
 import mandateRoutes from './routes/mandate.routes';
 import demoRoutes from './routes/demo.routes';
+import agentUsageRoutes from './routes/agent-usage.routes';
 import { startCheckoutSweeper } from './jobs/checkout-sweeper';
 
 // Initialize webhook service (sets up event listeners)
@@ -173,6 +174,8 @@ app.use(`${API_PREFIX}/checkout`, checkoutRoutes);
 app.use(`${API_PREFIX}/catalog`, catalogRoutes);
 app.use(`${API_PREFIX}/mandates`, mandateRoutes);
 app.use(`${API_PREFIX}/demo`, demoRoutes);
+// The shopper server's shared spend guard (only with AGENT_USAGE_KEY set; 404 otherwise).
+app.use(`${API_PREFIX}/internal/agent-usage`, agentUsageRoutes);
 
 // ---- Error Handling ----
 app.use(notFoundHandler());

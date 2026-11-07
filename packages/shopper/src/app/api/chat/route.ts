@@ -5,15 +5,20 @@ import { z } from "zod";
 import { createModelClient, readAgentConfig } from "@/lib/agent/azure";
 import { runAgentTurn, type AgentHistory } from "@/lib/agent/loop";
 import { readGuardLimits, trimHistory, UsageGuard } from "@/lib/agent/usage-guard";
+import { combinedMeter, readSharedUsage } from "@/lib/agent/shared-usage";
 import { readSession } from "@/lib/session";
 import { tokentoClient } from "@/lib/tokento";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-// One guard per server process (kept on globalThis so dev reloads don't reset it).
+// One guard per server process (kept on globalThis so dev reloads don't reset it). With
+// AGENT_USAGE_KEY set, the daily budget and hourly limit are also counted across every
+// instance in the API's Redis; the per-request cap stays here.
+const limits = readGuardLimits(process.env);
 const holder = globalThis as { tokentoUsageGuard?: UsageGuard };
-const guard = (holder.tokentoUsageGuard ??= new UsageGuard(readGuardLimits(process.env)));
+const guard = (holder.tokentoUsageGuard ??= new UsageGuard(limits));
+const shared = readSharedUsage(process.env);
 const MAX_HISTORY_BYTES = 200_000;
 
 const Body = z.object({
@@ -39,6 +44,12 @@ export async function POST(request: Request) {
   if (!admission.ok) {
     return Response.json({ error: { code: "usage_limit", message: admission.message } }, { status: 429 });
   }
+  if (shared) {
+    const everywhere = await shared.admit(session.customerId);
+    if (!everywhere.ok) {
+      return Response.json({ error: { code: "usage_limit", message: everywhere.message } }, { status: 429 });
+    }
+  }
 
   const model = createModelClient(config);
   const history = trimHistory(parsed.data.history as AgentHistory, MAX_HISTORY_BYTES);
@@ -48,7 +59,8 @@ export async function POST(request: Request) {
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        for await (const event of runAgentTurn({ model, config, api, meter: guard.meter() }, history, parsed.data.message)) {
+        const meter = shared ? combinedMeter(guard.meter(), shared, limits.prices) : guard.meter();
+        for await (const event of runAgentTurn({ model, config, api, meter }, history, parsed.data.message)) {
           controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
         }
       } catch {

@@ -77,8 +77,8 @@ export async function* runAgentTurn(
     model: ModelClient;
     config: AgentModelConfig;
     api: TokentoClient;
-    /** Charges each model call; `stop` ends the request before any more tool rounds. */
-    meter?: (usage: ModelUsage) => { stop: boolean };
+    /** Charges each model call; `stop` ends the request before any more tool rounds. May check a shared budget (async). */
+    meter?: (usage: ModelUsage) => { stop: boolean } | Promise<{ stop: boolean }>;
   },
   history: AgentHistory,
   userText: string,
@@ -128,7 +128,7 @@ export async function* runAgentTurn(
     }
 
     const calls = response.output.filter((item): item is FunctionCall => item.type === "function_call");
-    const overBudget = response.usage && deps.meter ? deps.meter(response.usage).stop : false;
+    const overBudget = response.usage && deps.meter ? (await deps.meter(response.usage)).stop : false;
 
     if (refused) {
       // Never run a tool from a reply the model refused, and don't keep that reply.

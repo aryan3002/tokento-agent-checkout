@@ -292,6 +292,19 @@ describe("runAgentTurn", () => {
     expect(events.at(-1)).toEqual({ type: "done", stopReason: "usage_limit" });
   });
 
+  it("waits for a meter that checks the shared budget, and stops when it says so", async () => {
+    const first = response([call("call_1", "search_products", { query: "coffee", max_price: null })]);
+    (first as unknown as { usage: unknown }).usage = { input_tokens: 9000, input_tokens_details: { cached_tokens: 0 }, output_tokens: 900 };
+    const { model, requests } = fakeModel([first, response([say("Done.")])]);
+    const { api, calls } = fakeApi({ "GET /catalog/search": () => ({ status: 200, body: searchResult }) });
+
+    const events = await collect(runAgentTurn({ model, config, api, meter: async () => ({ stop: true }) }, [], "Find coffee"));
+
+    expect(requests).toHaveLength(1);
+    expect(calls).toHaveLength(0);
+    expect(events.at(-1)).toEqual({ type: "done", stopReason: "usage_limit" });
+  });
+
   it("asks for short replies so one request can't run up the bill", async () => {
     const { model, requests } = fakeModel([response([say("Hi.")])]);
     const { api } = fakeApi();
