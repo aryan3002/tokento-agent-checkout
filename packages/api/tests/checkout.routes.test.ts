@@ -31,8 +31,9 @@ let harbor: StoreFixture;
 let coffeeKey: string;
 let harborKey: string;
 const tag = randomUUID().slice(0, 6);
+const webhookEventIds: string[] = [];
 
-const as = (customerId: string) => ({ Authorization: `Bearer b2c_dev_session::${customerId}` });
+const as =(customerId: string) => ({ Authorization: `Bearer b2c_dev_session::${customerId}` });
 
 async function shopperWithReward() {
   const customerId = await db.shopper();
@@ -57,6 +58,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await prisma.paypalWebhookEvent.deleteMany({ where: { id: { in: webhookEventIds } } });
   await db.cleanup();
 });
 
@@ -176,5 +178,61 @@ describe('store order routes', () => {
     expect(rightStore.status).toBe(200);
     expect(rightStore.body.status).toBe(CheckoutStatus.REFUNDED);
     expect((await prisma.checkoutOrder.findUniqueOrThrow({ where: { id: created.body.id } })).status).toBe(CheckoutStatus.REFUNDED);
+  });
+
+  it('a store reads one of its own orders by id; another store gets 404', async () => {
+    const customerId = await shopperWithReward();
+    const created = await request(app).post('/api/v1/checkout/orders').set(as(customerId)).set('Idempotency-Key', randomUUID())
+      .send({ productId: coffee.products.beans });
+
+    const own = await request(app).get(`/api/v1/merchants/me/orders/${created.body.id}`).set('X-API-Key', coffeeKey);
+    const otherStore = await request(app).get(`/api/v1/merchants/me/orders/${created.body.id}`).set('X-API-Key', harborKey);
+    const unknown = await request(app).get('/api/v1/merchants/me/orders/not-an-order').set('X-API-Key', coffeeKey);
+
+    expect(own.status).toBe(200);
+    expect(own.body).toMatchObject({ id: created.body.id, status: CheckoutStatus.CREATED, subtotal: 28, amountToPay: 23 });
+    expect(otherStore.status).toBe(404);
+    expect(unknown.status).toBe(404);
+  });
+
+  it('a store sees the verified PayPal webhooks about its own orders, newest first', async () => {
+    const customerId = await shopperWithReward();
+    const created = await request(app).post('/api/v1/checkout/orders').set(as(customerId)).set('Idempotency-Key', randomUUID())
+      .send({ productId: coffee.products.beans });
+    const [approved, captured, stray] = [`WH-A-${randomUUID()}`, `WH-C-${randomUUID()}`, `WH-S-${randomUUID()}`];
+    webhookEventIds.push(approved, captured, stray);
+    await prisma.paypalWebhookEvent.createMany({
+      data: [
+        {
+          id: approved, eventType: 'CHECKOUT.ORDER.APPROVED', resourceId: created.body.paypal.orderId, verified: true,
+          payload: { id: approved, summary: 'An order has been approved by buyer' },
+          receivedAt: new Date(Date.now() - 60_000), processedAt: new Date(),
+        },
+        {
+          // Handling failed, so PayPal will deliver it again.
+          id: captured, eventType: 'CHECKOUT.ORDER.APPROVED', resourceId: created.body.paypal.orderId, verified: true,
+          payload: { id: captured }, receivedAt: new Date(), error: 'database unavailable',
+        },
+        {
+          id: stray, eventType: 'PAYMENT.CAPTURE.COMPLETED', resourceId: `CAPTURE-${randomUUID()}`, verified: true,
+          payload: { id: stray }, processedAt: new Date(),
+        },
+      ],
+    });
+
+    const coffeeEvents = await request(app).get('/api/v1/merchants/me/paypal-events').set('X-API-Key', coffeeKey);
+    const harborEvents = await request(app).get('/api/v1/merchants/me/paypal-events').set('X-API-Key', harborKey);
+
+    expect(coffeeEvents.status).toBe(200);
+    const mine = coffeeEvents.body.events.filter((e: { id: string }) => [approved, captured, stray].includes(e.id));
+    expect(mine).toEqual([
+      expect.objectContaining({ id: captured, checkoutId: created.body.id, verified: true, state: 'retrying', summary: null }),
+      expect.objectContaining({
+        id: approved, eventType: 'CHECKOUT.ORDER.APPROVED', checkoutId: created.body.id, verified: true,
+        state: 'processed', summary: 'An order has been approved by buyer',
+      }),
+    ]);
+    expect(harborEvents.status).toBe(200);
+    expect(harborEvents.body.events.map((e: { id: string }) => e.id)).not.toContain(approved);
   });
 });

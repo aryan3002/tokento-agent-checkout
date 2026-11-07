@@ -4,6 +4,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { refundOrder } from '../checkout/refund';
 import { checkoutService } from '../checkout/checkout.service';
+import { listPayPalEventsForMerchant } from '../checkout/paypal-events';
 import { z } from 'zod';
 import { merchantService } from '../services/merchant.service';
 import { authenticateApiKeyOrB2BSession } from '../middleware/auth.middleware';
@@ -108,6 +109,21 @@ router.get('/me/redemptions', authenticateApiKeyOrB2BSession(['tokens:read']), a
 router.get('/me/orders', authenticateApiKeyOrB2BSession(['tokens:read']), async (req: Request, res: Response, next: NextFunction) => {
   try {
     res.json({ orders: await checkoutService.listForMerchant(req.merchantId!) });
+  } catch (err) { next(err); }
+});
+
+// GET /v1/merchants/me/orders/:id — one agent order (the dashboard refreshes a row after a live event)
+router.get('/me/orders/:id', authenticateApiKeyOrB2BSession(['tokens:read']), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const checkoutId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    res.json(await checkoutService.getForMerchant(req.merchantId!, checkoutId));
+  } catch (err) { next(err); }
+});
+
+// GET /v1/merchants/me/paypal-events — verified PayPal webhooks about this store's orders, newest first
+router.get('/me/paypal-events', authenticateApiKeyOrB2BSession(['tokens:read']), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({ events: await listPayPalEventsForMerchant(req.merchantId!) });
   } catch (err) { next(err); }
 });
 

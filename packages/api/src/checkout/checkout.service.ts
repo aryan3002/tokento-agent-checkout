@@ -324,6 +324,13 @@ export class CheckoutService {
     return this.view(order);
   }
 
+  /** A store's view of one of its orders. Another store's order is "not found", as with refunds. */
+  async getForMerchant(merchantId: string, checkoutId: string): Promise<CheckoutOrderView> {
+    const order = await prisma.checkoutOrder.findFirst({ where: { id: checkoutId, merchantId }, include: ORDER_INCLUDE });
+    if (!order) throw new AppError(404, 'checkout_not_found', 'Checkout order not found.');
+    return this.view(order);
+  }
+
   async listForCustomer(customerId: string, limit = 50): Promise<CheckoutOrderView[]> {
     const orders = await prisma.checkoutOrder.findMany({
       where: { customerId },

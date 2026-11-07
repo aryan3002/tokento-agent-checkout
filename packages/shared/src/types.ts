@@ -392,3 +392,18 @@ export interface CheckoutOrderView {
   completedAt: string | null;
   refundedAt: string | null;
 }
+
+/**
+ * A PayPal webhook about one of a store's orders, for the dashboard feed. Only
+ * deliveries that passed PayPal's signature check are stored, so `verified` is true.
+ * state: processed (handled), retrying (handling failed; PayPal redelivers), received (not handled yet).
+ */
+export interface PayPalEventView {
+  id: string;
+  eventType: string;
+  summary: string | null;
+  checkoutId: string | null;
+  verified: boolean;
+  state: 'processed' | 'retrying' | 'received';
+  receivedAt: string;
+}

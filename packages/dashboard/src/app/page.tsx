@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useCallback, useMemo, FormEvent } from "react";
 import { FirstRun } from "./components/FirstRun";
+import { AgentOrdersTab, type StreamEvent } from "./components/AgentOrdersTab";
 
 // All API traffic goes through the same-origin server proxy at /api/proxy, which
 // attaches the merchant API key server-side. No credential is shipped to the browser.
@@ -97,20 +98,21 @@ type WebhookDelivery = {
   createdAt: string;
 };
 
-type Tab = "overview" | "tokens" | "rules" | "redemptions" | "webhooks" | "settings" | "demo" | "status";
+type Tab = "overview" | "agent-orders" | "tokens" | "rules" | "redemptions" | "webhooks" | "settings" | "demo" | "status";
 
 type ConnectionState = "connecting" | "live" | "down";
 type LoginStatus = "idle" | "sending" | "sent" | "error";
 
 const TAB_DEFS: { key: Tab; label: string; icon: string }[] = [
   { key: "overview", label: "Overview", icon: "01" },
-  { key: "tokens", label: "Tokens", icon: "02" },
-  { key: "rules", label: "Earn Rules", icon: "03" },
-  { key: "redemptions", label: "Redemptions", icon: "04" },
-  { key: "webhooks", label: "Webhooks", icon: "05" },
-  { key: "settings", label: "Settings", icon: "06" },
-  { key: "demo", label: "Demo Wiring", icon: "07" },
-  { key: "status", label: "System Status", icon: "08" },
+  { key: "agent-orders", label: "Agent Orders", icon: "02" },
+  { key: "tokens", label: "Tokens", icon: "03" },
+  { key: "rules", label: "Earn Rules", icon: "04" },
+  { key: "redemptions", label: "Redemptions", icon: "05" },
+  { key: "webhooks", label: "Webhooks", icon: "06" },
+  { key: "settings", label: "Settings", icon: "07" },
+  { key: "demo", label: "Demo Wiring", icon: "08" },
+  { key: "status", label: "System Status", icon: "09" },
 ];
 
 const SERVICES = [
@@ -323,6 +325,15 @@ export default function Dashboard() {
     });
   }, [refreshAll]);
 
+  // Tabs that want raw checkout / PayPal events subscribe here; the one SSE connection fans them out.
+  const streamListeners = useRef(new Set<(event: StreamEvent) => void>());
+  const subscribeStream = useCallback((listener: (event: StreamEvent) => void) => {
+    streamListeners.current.add(listener);
+    return () => {
+      streamListeners.current.delete(listener);
+    };
+  }, []);
+
   // SSE subscription — replaces 3s polling
   const esRef = useRef<EventSource | null>(null);
   useEffect(() => {
@@ -402,6 +413,21 @@ export default function Dashboard() {
           if (Array.isArray(next)) setEarnRules(next);
         }).catch(() => {});
       });
+
+      for (const type of [
+        "checkout.created",
+        "checkout.updated",
+        "checkout.completed",
+        "checkout.cancelled",
+        "checkout.refunded",
+        "paypal.webhook",
+      ]) {
+        es.addEventListener(type, (e) => {
+          setLastEventAt(new Date().toISOString());
+          const payload = JSON.parse((e as MessageEvent).data) as Record<string, unknown>;
+          for (const listener of streamListeners.current) listener({ type, payload });
+        });
+      }
 
       es.onerror = () => {
         setConnection("down");
@@ -553,6 +579,7 @@ export default function Dashboard() {
               />
             )
           )}
+          {tab === "agent-orders" && <AgentOrdersTab request={api} subscribe={subscribeStream} />}
           {tab === "tokens" && (
             <TokensTab tokens={tokens} earnRuleNameById={earnRuleNameById} flashTokenId={flashTokenId} />
           )}
