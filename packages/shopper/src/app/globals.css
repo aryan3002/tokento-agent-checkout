@@ -1,66 +1,142 @@
 @import "tailwindcss";
 
 /* ============================================================
-   Tokento — "The Ledger"
+   Tokento store dashboard — Geist-style light and dark themes.
    ============================================================
-   The merchant dashboard is a printed ledger book: uncoated paper,
-   warm ink, and a single terracotta stamp that marks value changing
-   hands. This is the same palette as the marketing site, so the
-   product and the story look like one company.
+   The markup uses semantic tokens (surface-N, text-*, brand-*, border,
+   success/warning/error). Each token reads a CSS variable, and the
+   variables change with the theme: system preference by default, or
+   data-theme="light" | "dark" on <html> once the store owner picks one.
 
-   Previously this file was the generic AI-SaaS stack — Inter, an
-   indigo gradient, glassmorphism and a glow — every one of which the
-   brand brief forbids by name.
-
-   The markup uses semantic tokens (surface-N, text-*, brand-*), so
-   remapping the values below rethemes the whole dashboard at once.
+   surface-0 is the page, surface-1 a card, surface-2 a quiet panel
+   (sidebar, table header), surface-3 hover and selected, surface-4 a
+   stronger fill. Borders are solid, one pixel, drawn once.
    ============================================================ */
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: var(--surface-0);
+  --color-foreground: var(--text-primary);
   --font-sans: var(--font-body);
-  --font-serif: var(--font-display);
+  --font-serif: var(--font-body);
   --font-mono: var(--font-mono-ui);
 
-  /* The stamp. One saturated colour in the entire product. */
-  --color-brand-50: #f7ece9;
-  --color-brand-100: #efd8d2;
-  --color-brand-200: #e0b3a9;
-  --color-brand-300: #d08d80;
-  --color-brand-400: #c46e5e;
-  --color-brand-500: #b85042;
-  --color-brand-600: #a8453a;
-  --color-brand-700: #8d382f;
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-300: var(--brand-300);
+  --color-brand-400: var(--brand-400);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
 
-  /* Paper. surface-0 is the page; higher numbers sit closer to the reader. */
-  --color-surface-0: #f5f1e8;
-  --color-surface-1: #faf7f0;
-  --color-surface-2: #efe9dc;
-  --color-surface-3: #e8e1d3;
-  --color-surface-4: #ded5c4;
+  --color-surface-0: var(--surface-0);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-surface-4: var(--surface-4);
 
-  --color-border: #d6cfbf;
-  --color-border-hover: #c2b8a3;
+  --color-border: var(--border);
+  --color-border-hover: var(--border-hover);
 
-  --color-text-primary: #0f0f0e;
-  --color-text-secondary: #3a3a36;
-  --color-text-muted: #6b6759;
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
 
-  /* Muted to sit inside a paper palette rather than shout over it. */
-  --color-success: #4f6f52;
-  --color-warning: #a8762c;
-  --color-error: #b85042;
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
 }
 
 :root {
-  --background: #f5f1e8;
-  --foreground: #0f0f0e;
+  color-scheme: light;
+  --surface-0: #ffffff;
+  --surface-1: #ffffff;
+  --surface-2: #fafafa;
+  --surface-3: #f2f2f2;
+  --surface-4: #e8e8e8;
+  --border: #ebebeb;
+  --border-hover: #d1d1d1;
+  --text-primary: #171717;
+  --text-secondary: #404040;
+  --text-muted: #666666;
+  --success: #12773f;
+  --warning: #a35200;
+  --error: #c4262c;
+  --dot-success: #1fa35a;
+  --dot-warning: #f5a524;
+  --dot-error: #e5484d;
+  --dot-neutral: #a8a8a8;
+  --brand-50: #ebf5ff;
+  --brand-100: #d6eaff;
+  --brand-200: #add5ff;
+  --brand-300: #7fbcff;
+  --brand-400: #4d9fff;
+  --brand-500: #0a6ce6;
+  --brand-600: #0759c2;
+  --brand-700: #05489e;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.04);
+}
 
-  /* Paper grain. A faint two-tone noise so large fields are never dead flat. */
-  --grain:
-    radial-gradient(circle at 15% 20%, rgba(15, 15, 14, 0.014) 0 1px, transparent 1px),
-    radial-gradient(circle at 68% 74%, rgba(15, 15, 14, 0.011) 0 1px, transparent 1px);
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-0: #000000;
+  --surface-1: #0a0a0a;
+  --surface-2: #0a0a0a;
+  --surface-3: #1a1a1a;
+  --surface-4: #262626;
+  --border: #262626;
+  --border-hover: #3d3d3d;
+  --text-primary: #ededed;
+  --text-secondary: #c7c7c7;
+  --text-muted: #a1a1a1;
+  --success: #4fd187;
+  --warning: #f5b14c;
+  --error: #ff6b70;
+  --dot-success: #2cc26f;
+  --dot-warning: #f5a524;
+  --dot-error: #e5484d;
+  --dot-neutral: #6e6e6e;
+  --brand-50: #0b1a2c;
+  --brand-100: #0e2742;
+  --brand-200: #12365c;
+  --brand-300: #1c528f;
+  --brand-400: #2f7bd6;
+  --brand-500: #52a8ff;
+  --brand-600: #78bbff;
+  --brand-700: #a6d2ff;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface-0: #000000;
+    --surface-1: #0a0a0a;
+    --surface-2: #0a0a0a;
+    --surface-3: #1a1a1a;
+    --surface-4: #262626;
+    --border: #262626;
+    --border-hover: #3d3d3d;
+    --text-primary: #ededed;
+    --text-secondary: #c7c7c7;
+    --text-muted: #a1a1a1;
+    --success: #4fd187;
+    --warning: #f5b14c;
+    --error: #ff6b70;
+    --dot-success: #2cc26f;
+    --dot-warning: #f5a524;
+    --dot-error: #e5484d;
+    --dot-neutral: #6e6e6e;
+    --brand-50: #0b1a2c;
+    --brand-100: #0e2742;
+    --brand-200: #12365c;
+    --brand-300: #1c528f;
+    --brand-400: #2f7bd6;
+    --brand-500: #52a8ff;
+    --brand-600: #78bbff;
+    --brand-700: #a6d2ff;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  }
 }
 
 * {
@@ -68,16 +144,13 @@
 }
 
 body {
-  background-color: var(--background);
-  background-image: var(--grain);
-  background-size: 180px 180px, 240px 240px;
-  color: var(--foreground);
+  background-color: var(--surface-0);
+  color: var(--text-primary);
   font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
-  font-feature-settings: "kern" 1, "liga" 1;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Ledger figures must align in vertical columns. */
+/* Figures line up in columns. */
 .tabular,
 table td,
 table th {
@@ -85,11 +158,10 @@ table th {
 }
 
 h1, h2, h3, .display {
-  font-family: var(--font-display), Georgia, serif;
-  letter-spacing: -0.015em;
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.02em;
 }
 
-/* Scrollbar — a thin ink rule, not a floating pill. */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -98,109 +170,67 @@ h1, h2, h3, .display {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cfc6b2;
-  border: 2px solid var(--background);
-  border-radius: 0;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #b3a88f;
+  background: var(--surface-4);
+  border-radius: 8px;
+  border: 2px solid var(--surface-0);
 }
 
-/* ------------------------------------------------------------
-   Paper card. Replaces the old .glass (backdrop blur + white
-   transparency). Depth comes from a printed edge, not from blur.
-   ------------------------------------------------------------ */
+/* A card: solid border, small radius, barely-there shadow. */
 .glass {
-  background: var(--color-surface-1, #faf7f0);
-  border: 1px solid var(--color-border, #d6cfbf);
-  border-radius: 2px;
-  box-shadow:
-    0 1px 0 rgba(15, 15, 14, 0.04),
-    0 1px 2px rgba(15, 15, 14, 0.03);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
 }
 
-/* Replaces the indigo .glow. A printed page does not glow; it sits. */
 .glow {
-  box-shadow:
-    0 1px 0 rgba(15, 15, 14, 0.05),
-    0 8px 24px -16px rgba(15, 15, 14, 0.22);
+  box-shadow: var(--shadow);
 }
 
-/* Replaces the purple .gradient-text. Emphasis is ink, not a gradient. */
 .gradient-text {
-  color: var(--color-text-primary, #0f0f0e);
-  font-family: var(--font-display), Georgia, serif;
-  font-style: italic;
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
-/* ------------------------------------------------------------
-   Hand-set details
-   ------------------------------------------------------------ */
-
-/* Section label: mono, letterspaced, sitting in the gutter like a folio. */
+/* Section label: small, quiet, sentence case. */
 .folio {
-  font-family: var(--font-mono-ui), ui-monospace, monospace;
-  font-size: 0.6875rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--color-text-muted, #6b6759);
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
 }
 
-/* An imperfect rule, drawn rather than ruled. */
 .ink-rule {
   height: 1px;
   border: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    #cfc6b2 4%,
-    #b9ae96 22%,
-    #cfc6b2 48%,
-    #b9ae96 71%,
-    #cfc6b2 94%,
-    transparent 100%
-  );
+  background: var(--border);
 }
 
-/* Link underline that writes itself on hover. */
 .ink-link {
-  background-image: linear-gradient(currentColor, currentColor);
-  background-position: 0 100%;
-  background-repeat: no-repeat;
-  background-size: 0% 1px;
-  transition: background-size 200ms ease-out;
+  color: var(--brand-500);
   text-decoration: none;
 }
 .ink-link:hover {
-  background-size: 100% 1px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
-/* ------------------------------------------------------------
-   THE STAMP — a token being redeemed gets stamped, like a receipt.
-   This is the one moment of real motion in the product, and the
-   same gesture the marketing site uses.
-   ------------------------------------------------------------ */
+/* A quiet badge that pops in once when a reward is redeemed. */
 @keyframes stamp-down {
-  0%   { opacity: 0; transform: scale(2.6) rotate(-14deg); filter: blur(2px); }
-  55%  { opacity: 1; transform: scale(0.94) rotate(-6deg); filter: blur(0); }
-  70%  { transform: scale(1.04) rotate(-6deg); }
-  100% { opacity: 1; transform: scale(1) rotate(-6deg); }
+  0% { opacity: 0; transform: scale(0.9); }
+  100% { opacity: 1; transform: scale(1); }
 }
 .stamp {
-  animation: stamp-down 420ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
-  color: var(--color-brand-500, #b85042);
-  border: 2px solid currentColor;
-  border-radius: 2px;
-  font-family: var(--font-mono-ui), monospace;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  /* Ink never prints perfectly evenly. */
-  opacity: 0.92;
+  animation: stamp-down 200ms ease-out both;
+  color: var(--success);
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
 }
 
-/* A row that just changed state gets a brief wash of stamp colour. */
+/* A row that just changed gets a brief blue wash. */
 @keyframes ink-wash {
-  0%   { background-color: rgba(184, 80, 66, 0.16); }
+  0% { background-color: color-mix(in oklab, var(--brand-500) 18%, transparent); }
   100% { background-color: transparent; }
 }
 .ink-wash {
@@ -212,48 +242,54 @@ h1, h2, h3, .display {
   50% { opacity: 0.35; }
 }
 .pulse-dot {
-  animation: pulse-dot 2s ease-in-out infinite;
+  animation: pulse-dot 1.6s ease-in-out infinite;
 }
 
 @keyframes slide-up {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .animate-slide-up {
-  animation: slide-up 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  animation: slide-up 0.3s ease-out forwards;
 }
 
 .stagger-children > * {
   opacity: 0;
-  animation: slide-up 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  animation: slide-up 0.3s ease-out forwards;
 }
 .stagger-children > *:nth-child(1) { animation-delay: 0ms; }
-.stagger-children > *:nth-child(2) { animation-delay: 60ms; }
-.stagger-children > *:nth-child(3) { animation-delay: 120ms; }
-.stagger-children > *:nth-child(4) { animation-delay: 180ms; }
-.stagger-children > *:nth-child(5) { animation-delay: 240ms; }
-.stagger-children > *:nth-child(6) { animation-delay: 300ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 40ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 80ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 120ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 160ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 200ms; }
 
 @keyframes shimmer {
-  0%   { background-position: -200% 0; }
+  0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
 .skeleton {
-  background: linear-gradient(90deg, #e8e1d3 25%, #f2ede2 50%, #e8e1d3 75%);
+  background: linear-gradient(90deg, var(--surface-3) 25%, var(--surface-2) 50%, var(--surface-3) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
-  border-radius: 2px;
+  border-radius: 6px;
 }
 
-/* The ink line that draws itself under the active tab. */
 @keyframes draw-rule {
   from { transform: scaleX(0); }
-  to   { transform: scaleX(1); }
+  to { transform: scaleX(1); }
 }
 .draw-rule {
   transform-origin: left center;
-  animation: draw-rule 260ms ease-out both;
+  animation: draw-rule 200ms ease-out both;
 }
+
+/* Status dots: colour plus the label next to it, never colour alone. */
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 999px; flex: none; }
+.dot-success { background: var(--dot-success); }
+.dot-warning { background: var(--dot-warning); }
+.dot-error { background: var(--dot-error); }
+.dot-neutral { background: var(--dot-neutral); }
 
 @media (prefers-reduced-motion: reduce) {
   *,

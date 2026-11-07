@@ -47,24 +47,24 @@ export function CheckoutCard({
     <div className="glass animate-slide-up relative overflow-hidden p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="folio">{order.merchant.name} · PayPal checkout</p>
+          <p className="text-xs text-text-muted">{order.merchant.name} · PayPal checkout</p>
           <p className="mt-1 font-medium">{order.quantity > 1 ? `${order.quantity} × ` : ""}{order.product.name}</p>
         </div>
-        {paid && <span className="stamp shrink-0 px-2 py-1 text-xs">Paid</span>}
-        {order.status === "REFUNDED" && <span className="stamp shrink-0 px-2 py-1 text-xs">Refunded</span>}
+        {paid && <span className="stamp flex shrink-0 items-center gap-1.5 bg-success/10 px-2.5 py-0.5 text-xs font-medium"><span className="dot dot-success" />Paid</span>}
+        {order.status === "REFUNDED" && <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-2.5 py-0.5 text-xs font-medium text-text-muted"><span className="dot dot-neutral" />Refunded</span>}
       </div>
 
-      <dl className="tabular mt-3 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 font-mono text-sm">
+      <dl className="tabular mt-3 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm [&_dd]:font-mono">
         <dt className="text-text-secondary">Price</dt>
         <dd className="text-right">{usd(order.subtotal)}</dd>
         {order.reward && (
           <>
             <dt className="text-text-secondary">{order.reward.state === "reissued" ? "Reward (returned)" : "Your reward"}</dt>
-            <dd className="text-right text-brand-600">−{usd(order.reward.amount)}</dd>
+            <dd className="text-right text-warning">−{usd(order.reward.amount)}</dd>
           </>
         )}
-        <dt className="font-medium">{paid ? "Paid with PayPal" : order.status === "REFUNDED" ? "Refunded to PayPal" : "PayPal charges"}</dt>
-        <dd className="text-right font-medium">{usd(order.amountToPay)}</dd>
+        <dt className="border-t border-border pt-1.5 font-medium">{paid ? "Paid with PayPal" : order.status === "REFUNDED" ? "Refunded to PayPal" : "You pay with PayPal"}</dt>
+        <dd className="border-t border-border pt-1.5 text-right font-semibold">{usd(order.amountToPay)}</dd>
         {order.earned && order.earned.state !== "voided" && (
           <>
             <dt className="text-text-secondary">{order.earned.state === "expected" ? "You'll earn" : "You earned"}</dt>
@@ -75,7 +75,7 @@ export function CheckoutCard({
 
       {order.agentReason && (
         <p className="mt-3 text-sm text-text-secondary">
-          <span className="folio mr-2">Why this store</span>
+          <span className="mr-1.5 font-medium text-text-primary">Why this store:</span>
           {order.agentReason}
         </p>
       )}
@@ -114,7 +114,7 @@ export function CheckoutCard({
       )}
 
       {paid && order.paypal.captureId && (
-        <p className="folio mt-3">PayPal capture {order.paypal.captureId}</p>
+        <p className="mt-3 font-mono text-xs text-text-muted">PayPal capture {order.paypal.captureId}</p>
       )}
       {!waiting && !paid && order.status !== "REFUNDED" && <p className="mt-3 text-sm text-text-secondary">{order.receipt}</p>}
       {order.status === "REFUNDED" && <p className="mt-3 text-sm text-text-secondary">{order.receipt}</p>}

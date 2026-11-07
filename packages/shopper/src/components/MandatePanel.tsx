@@ -91,19 +91,19 @@ export function MandatePanel({ data, onChanged }: { data: MandateData | null; on
       </div>
 
       {data === null ? (
-        <div className="skeleton mt-3 h-12 rounded-sm" />
+        <div className="skeleton mt-3 h-12 rounded-md" />
       ) : editing ? (
         <form onSubmit={save} className="mt-3 space-y-3 text-sm">
           <div className="grid grid-cols-2 gap-2">
             <label className="block">
               <span className="text-xs text-text-muted">Per purchase ($)</span>
               <input name="perPurchaseMax" type="number" min="1" step="0.01" required defaultValue={mandate?.perPurchaseMax ?? 30}
-                className="tabular mt-1 w-full rounded-sm border border-border bg-surface-0 px-2 py-1 font-mono" />
+                className="tabular mt-1 w-full rounded-md border border-border bg-surface-0 px-2 py-1 font-mono" />
             </label>
             <label className="block">
               <span className="text-xs text-text-muted">Per month ($)</span>
               <input name="monthlyCap" type="number" min="1" step="0.01" required defaultValue={mandate?.monthlyCap ?? 100}
-                className="tabular mt-1 w-full rounded-sm border border-border bg-surface-0 px-2 py-1 font-mono" />
+                className="tabular mt-1 w-full rounded-md border border-border bg-surface-0 px-2 py-1 font-mono" />
             </label>
           </div>
           <fieldset>
@@ -120,14 +120,14 @@ export function MandatePanel({ data, onChanged }: { data: MandateData | null; on
           </fieldset>
           <label className="block">
             <span className="text-xs text-text-muted">For</span>
-            <select name="days" defaultValue="30" className="mt-1 w-full rounded-sm border border-border bg-surface-0 px-2 py-1">
+            <select name="days" defaultValue="30" className="mt-1 w-full rounded-md border border-border bg-surface-0 px-2 py-1">
               <option value="7">7 days</option>
               <option value="30">30 days</option>
               <option value="90">90 days</option>
             </select>
           </label>
           <div className="flex items-center gap-3">
-            <button type="submit" disabled={busy} className="rounded-sm bg-text-primary px-3 py-1.5 text-xs font-medium text-surface-1 disabled:opacity-50">
+            <button type="submit" disabled={busy} className="rounded-md bg-text-primary px-3 py-1.5 text-xs font-medium text-surface-0 hover:opacity-90 disabled:opacity-50">
               {busy ? "Saving…" : "Save limits"}
             </button>
             <button type="button" className="ink-link text-xs text-text-muted" onClick={() => setEditing(false)}>Cancel</button>
@@ -139,8 +139,8 @@ export function MandatePanel({ data, onChanged }: { data: MandateData | null; on
             {usd(mandate.perPurchaseMax)} <span className="font-sans text-text-muted">per purchase</span> · {usd(mandate.monthlyCap)} <span className="font-sans text-text-muted">a month</span>
           </p>
           <div>
-            <div className="h-1.5 w-full bg-surface-3">
-              <div className="h-1.5 bg-brand-500" style={{ width: `${Math.min(100, (mandate.spentThisMonth / mandate.monthlyCap) * 100)}%` }} />
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
+              <div className="h-1.5 rounded-full bg-brand-500" style={{ width: `${Math.min(100, (mandate.spentThisMonth / mandate.monthlyCap) * 100)}%` }} />
             </div>
             <p className="tabular mt-1 text-xs text-text-muted">{usd(mandate.spentThisMonth)} used this month · {usd(mandate.remainingThisMonth)} left</p>
           </div>
@@ -157,7 +157,7 @@ export function MandatePanel({ data, onChanged }: { data: MandateData | null; on
                 Inside these limits the agent goes ahead and you approve each payment in PayPal; anything outside them, it asks you first.
               </p>
               <button type="button" disabled={busy} onClick={() => void linkPayPal()}
-                className="rounded-sm bg-text-primary px-3 py-1.5 text-xs font-medium text-surface-1 disabled:opacity-50">
+                className="rounded-md bg-text-primary px-3 py-1.5 text-xs font-medium text-surface-0 hover:opacity-90 disabled:opacity-50">
                 {busy ? "Opening PayPal…" : "Link PayPal once"}
               </button>
               <p className="text-[11px] text-text-muted">Approve once in PayPal; after that the agent pays inside these limits without asking.</p>
@@ -167,7 +167,7 @@ export function MandatePanel({ data, onChanged }: { data: MandateData | null; on
       ) : (
         <div className="mt-3 space-y-2 text-sm">
           <p className="text-text-secondary">No limits set. You approve every payment in PayPal yourself.</p>
-          <button type="button" onClick={() => setEditing(true)} className="rounded-sm border border-border px-3 py-1.5 text-xs hover:border-border-hover">
+          <button type="button" onClick={() => setEditing(true)} className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-surface-3">
             Set limits
           </button>
         </div>

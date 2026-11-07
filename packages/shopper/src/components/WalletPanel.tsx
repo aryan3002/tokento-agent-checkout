@@ -33,11 +33,11 @@ export function WalletPanel({
     <aside className="space-y-6">
       <section className="glass p-4">
         <div className="flex items-baseline justify-between">
-          <p className="folio">{name}&apos;s rewards</p>
+          <p className="folio">{name === "Your" ? "Your rewards" : `${name}'s rewards`}</p>
           {totalValue !== null && <p className="tabular font-mono text-sm">{usd(totalValue)}</p>}
         </div>
         {rewards === null ? (
-          <div className="skeleton mt-3 h-12 rounded-sm" />
+          <div className="skeleton mt-3 h-12 rounded-md" />
         ) : rewards.length === 0 ? (
           <p className="mt-3 text-sm text-text-muted">No rewards right now.</p>
         ) : (
@@ -50,7 +50,7 @@ export function WalletPanel({
                     {r.minimumOrder > 0 ? `Orders of ${usd(r.minimumOrder)}+ · ` : ""}expires {r.expiresOn}
                   </p>
                 </div>
-                <p className="tabular font-mono text-sm text-brand-600">{usd(r.amount)}</p>
+                <p className="tabular font-mono text-sm text-success">{usd(r.amount)}</p>
               </li>
             ))}
           </ul>
@@ -60,7 +60,7 @@ export function WalletPanel({
       <section className="glass p-4">
         <p className="folio">Recent agent orders</p>
         {orders === null ? (
-          <div className="skeleton mt-3 h-12 rounded-sm" />
+          <div className="skeleton mt-3 h-12 rounded-md" />
         ) : orders.length === 0 ? (
           <p className="mt-3 text-sm text-text-muted">Nothing yet.</p>
         ) : (
@@ -69,9 +69,9 @@ export function WalletPanel({
               <li key={o.id} className="flex items-start justify-between gap-3 border-t border-border pt-2 first:border-0 first:pt-0">
                 <div className="min-w-0">
                   <p className="truncate text-sm">{o.product.name}</p>
-                  <p className="text-xs text-text-muted">{o.merchant.name} · {STATUS_LABEL[o.status] ?? o.status}</p>
+                  <p className="flex items-center gap-1.5 text-xs text-text-muted"><span className={`dot ${o.status === "COMPLETED" ? "dot-success" : o.status === "CANCELLED" || o.status === "REFUNDED" ? "dot-neutral" : o.status === "FAILED" || o.status === "NEEDS_REVIEW" ? "dot-error" : "dot-warning"}`} />{o.merchant.name} · {STATUS_LABEL[o.status] ?? o.status}</p>
                 </div>
-                <p className="tabular font-mono text-sm">{usd(o.amountToPay)}</p>
+                <p className={`tabular font-mono text-sm ${o.status === "CANCELLED" || o.status === "FAILED" ? "text-text-muted line-through" : ""}`}>{usd(o.amountToPay)}</p>
               </li>
             ))}
           </ul>

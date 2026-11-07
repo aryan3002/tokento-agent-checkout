@@ -14,6 +14,10 @@ import { CheckoutCard } from "./CheckoutCard";
 import { MandatePanel, type MandateData } from "./MandatePanel";
 import { OfferTable } from "./OfferTable";
 import { WalletPanel } from "./WalletPanel";
+import { ThemeToggle } from "./ThemeToggle";
+
+// The store's side of the demo, linked from the header so judges can watch both halves.
+const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL || "http://localhost:3100";
 
 const SUGGESTIONS = ["Reorder my coffee beans, under $30", "What rewards do I have?", "Find me a travel mug"];
 
@@ -212,11 +216,11 @@ export function ShopperApp() {
     return (
       <main className="mx-auto max-w-md px-4 py-24">
         <div className="glass p-6">
-          <p className="folio">Tokento Shopper</p>
+          <p className="font-medium">Tokento Shopper</p>
           <p className="mt-2 text-text-secondary">{startError}</p>
           <button
             type="button"
-            className="mt-4 rounded-sm border border-border px-3 py-1.5 text-sm hover:border-border-hover"
+            className="mt-4 rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-3"
             onClick={() => {
               setStartError(null);
               setAttempt((n) => n + 1);
@@ -233,27 +237,36 @@ export function ShopperApp() {
   const last = transcript.entries.at(-1);
   const page = (
     <div className="min-h-screen">
-      <header className="border-b border-border">
-        <div className="mx-auto flex max-w-6xl items-end justify-between gap-4 px-4 py-5">
-          <div>
-            <p className="folio">Agent checkout · PayPal sandbox</p>
-            <h1 className="mt-1 text-3xl">Tokento Shopper</h1>
-          </div>
-          <p className="pb-1 text-right text-sm text-text-secondary">
+      <header className="sticky top-0 z-20 border-b border-border bg-surface-0/90 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
+          <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden className="flex-none">
+            <rect width="24" height="24" rx="6" fill="var(--text-primary)" />
+            <path d="M7 8h10M12 8v9" stroke="var(--surface-0)" strokeWidth="2.2" strokeLinecap="round" />
+          </svg>
+          <h1 className="text-[15px] font-semibold tracking-tight">
+            Tokento <span className="font-normal text-text-muted">Shopper</span>
+          </h1>
+          <span className="hidden rounded-full border border-border px-2 text-xs text-text-muted sm:inline">PayPal sandbox</span>
+          <div className="ml-auto flex items-center gap-3">
+            <a href={DASHBOARD_URL} target="_blank" rel="noreferrer" className="hidden rounded-md border border-border px-2.5 py-1 text-[13px] font-medium hover:bg-surface-3 sm:inline-flex">
+              Store dashboard ↗
+            </a>
+            <ThemeToggle />
             {name ? (
-              <>
-                Shopping for <span className="font-medium text-text-primary">{name}</span>
-              </>
+              <span className="flex items-center gap-2 text-sm">
+                <span aria-hidden className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-700">{name.slice(0, 1)}</span>
+                <span className="hidden sm:inline">{name}</span>
+              </span>
             ) : (
-              "Starting your session…"
+              <span className="text-sm text-text-muted">Starting…</span>
             )}
-          </p>
+          </div>
         </div>
       </header>
 
       {demo && !demo.agentConfigured && (
         <div className="border-b border-border bg-surface-2">
-          <p className="mx-auto max-w-6xl px-4 py-2 text-sm text-text-secondary">
+          <p className="mx-auto max-w-6xl px-4 py-2 text-sm text-text-muted">
             Chat is off on this server: no Azure OpenAI deployment is configured. The wallet and orders still load.
           </p>
         </div>
@@ -263,19 +276,33 @@ export function ShopperApp() {
         <section className="flex min-h-[calc(100vh-8rem)] flex-col" aria-label="Chat with the shopping agent">
           <div role="log" aria-live="polite" className="flex-1 space-y-4">
             {transcript.entries.length === 0 && (
-              <div className="animate-slide-up max-w-xl pt-6">
-                <p className="display text-2xl leading-snug">What can I buy for you{name ? `, ${name}` : ""}?</p>
-                <p className="mt-2 text-text-secondary">
-                  I compare stores using your rewards, pay the rest with PayPal once you approve, and the purchase earns your next reward.
-                </p>
-                <div className="mt-5 flex flex-wrap gap-2">
+              <div className="animate-slide-up max-w-2xl pt-8">
+                <p className="text-sm text-text-muted">Your AI shopping agent</p>
+                <p className="mt-1 text-3xl font-semibold tracking-tight">What should I buy for you{name ? `, ${name}` : ""}?</p>
+                <ol className="mt-5 grid gap-2 sm:grid-cols-3">
+                  {[
+                    ["1", "I compare stores", "Using the rewards you already have, so you see the real price."],
+                    ["2", "You approve in PayPal", "Nothing is charged until you say yes. Or let me pay inside your limits."],
+                    ["3", "You earn your next reward", "The purchase gives you a new reward at that store."],
+                  ].map(([n, title, text]) => (
+                    <li key={n} className="flex gap-2.5 rounded-lg border border-border bg-surface-1 p-3">
+                      <span className="flex h-5 w-5 flex-none items-center justify-center rounded-full bg-text-primary font-mono text-[11px] text-surface-0">{n}</span>
+                      <span>
+                        <span className="block text-sm font-medium">{title}</span>
+                        <span className="mt-0.5 block text-[13px] leading-snug text-text-muted">{text}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+                <p className="mt-6 text-sm text-text-muted">Try one:</p>
+                <div className="mt-2 flex flex-wrap gap-2">
                   {SUGGESTIONS.map((s) => (
                     <button
                       key={s}
                       type="button"
                       disabled={!canChat || transcript.busy}
                       onClick={() => void send(s)}
-                      className="rounded-sm border border-border bg-surface-1 px-3 py-1.5 text-sm transition-colors hover:border-border-hover disabled:opacity-50"
+                      className="rounded-full border border-border bg-surface-1 px-3.5 py-1.5 text-sm transition-colors hover:bg-surface-3 disabled:opacity-50"
                     >
                       {s}
                     </button>
@@ -294,15 +321,16 @@ export function ShopperApp() {
 
             {transcript.busy && last?.kind !== "assistant" && (
               <p className="flex items-center gap-2 text-sm text-text-muted">
-                <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-brand-500" aria-hidden />
-                Working on it
+                <span className="dot dot-warning pulse-dot" aria-hidden />
+                Working on it…
               </p>
             )}
             <div ref={endRef} />
           </div>
 
           <form onSubmit={submit} className="sticky bottom-0 mt-6 bg-surface-0 pb-5 pt-2">
-            <div className="flex items-end gap-2 border border-border bg-surface-1 p-2 focus-within:border-border-hover">
+            <p className="mb-2 text-center text-xs text-text-muted md:hidden">PayPal sandbox · no real money moves</p>
+            <div className="flex items-end gap-2 rounded-xl border border-border bg-surface-1 p-2 shadow-sm focus-within:border-border-hover">
               <label htmlFor="chat-input" className="sr-only">
                 Message the shopping agent
               </label>
@@ -313,13 +341,13 @@ export function ShopperApp() {
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={onKeyDown}
                 disabled={!canChat}
-                placeholder={canChat ? "Ask for something, like “reorder my coffee beans”" : "Chat is unavailable"}
+                placeholder={canChat ? "Tell your agent what to buy, like “reorder my coffee beans”" : "Chat is unavailable"}
                 className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-[15px] outline-none placeholder:text-text-muted disabled:opacity-60"
               />
               <button
                 type="submit"
                 disabled={!canSend}
-                className="h-10 shrink-0 rounded-sm bg-text-primary px-4 text-sm font-medium text-surface-1 transition-opacity disabled:opacity-40"
+                className="h-10 shrink-0 rounded-lg bg-text-primary px-4 text-sm font-medium text-surface-0 transition-opacity hover:opacity-90 disabled:opacity-40"
               >
                 Send
               </button>
@@ -327,7 +355,7 @@ export function ShopperApp() {
           </form>
         </section>
 
-        <div className="space-y-6 md:sticky md:top-6 md:self-start">
+        <div className="space-y-6 md:sticky md:top-16 md:self-start">
           <MandatePanel data={limits} onChanged={() => void refreshSidebar()} />
           <WalletPanel name={name ?? "Your"} rewards={rewards} totalValue={totalValue} orders={orders} />
         </div>
@@ -364,14 +392,16 @@ function ToolChips({ tools }: { tools: ToolEntry[] }) {
       {tools.map((t) => (
         <span
           key={t.id}
-          className={`inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 font-mono text-[11px] ${
-            t.state === "error" ? "border-error/40 text-error" : "border-border text-text-secondary"
+          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs ${
+            t.state === "error" ? "border-error/40 text-error" : "border-border bg-surface-1 text-text-secondary"
           }`}
         >
           {t.state === "running" ? (
-            <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-brand-500" aria-hidden />
+            <span className="dot dot-warning pulse-dot" aria-hidden />
+          ) : t.state === "ok" ? (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--dot-success)" strokeWidth="3" aria-hidden><path d="M5 12.5l4.5 4.5L19 7" /></svg>
           ) : (
-            <span aria-hidden>{t.state === "ok" ? "✓" : "✕"}</span>
+            <span aria-hidden>✕</span>
           )}
           {TOOL_LABELS[t.name] ?? t.name}
           {t.state === "error" && <span className="sr-only"> (failed)</span>}
@@ -396,13 +426,13 @@ function EntryView({
     case "user":
       return (
         <div className="flex justify-end">
-          <p className="max-w-[85%] whitespace-pre-wrap rounded-sm border border-border bg-surface-2 px-3 py-2 text-[15px]">{entry.text}</p>
+          <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-surface-3 px-4 py-2 text-[15px]">{entry.text}</p>
         </div>
       );
     case "assistant":
       return <p className="max-w-[92%] whitespace-pre-wrap text-[15px] leading-relaxed">{entry.text}</p>;
     case "progress":
-      return <p className="text-sm italic text-text-muted">{entry.text}</p>;
+      return <p className="flex items-center gap-2 text-sm text-text-muted"><span className="dot dot-neutral" aria-hidden />{entry.text}</p>;
     case "offers":
       return <OfferTable quote={entry.quote} />;
     case "rewards":
@@ -432,7 +462,7 @@ function RewardsCard({ rewards }: { rewards: RewardSummary[] }) {
                   {r.minimumOrder > 0 ? ` · orders ${usd(r.minimumOrder)}+` : ""} · expires {r.expiresOn}
                 </span>
               </span>
-              <span className="tabular font-mono text-brand-600">{usd(r.amount)}</span>
+              <span className="tabular font-mono text-success">{usd(r.amount)}</span>
             </li>
           ))}
         </ul>
