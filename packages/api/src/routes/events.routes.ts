@@ -37,6 +37,7 @@ const STREAMED_EVENTS: EventType[] = [
   EventType.SETTLEMENT_CREATED,
   EventType.SETTLEMENT_UPDATED,
   EventType.PAYPAL_WEBHOOK,
+  EventType.AGENT_COMPARED,
 ];
 
 const HEARTBEAT_MS = 15_000;

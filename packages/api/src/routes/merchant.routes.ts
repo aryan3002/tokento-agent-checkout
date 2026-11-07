@@ -5,6 +5,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { refundOrder } from '../checkout/refund';
 import { checkoutService } from '../checkout/checkout.service';
 import { listPayPalEventsForMerchant } from '../checkout/paypal-events';
+import { comparisonStats } from '../checkout/agent-comparisons';
 import { settlementService } from '../settlement/settlement.service';
 import { z } from 'zod';
 import { merchantService } from '../services/merchant.service';
@@ -125,6 +126,13 @@ router.get('/me/orders/:id', authenticateApiKeyOrB2BSession(['tokens:read']), as
 router.get('/me/paypal-events', authenticateApiKeyOrB2BSession(['tokens:read']), async (req: Request, res: Response, next: NextFunction) => {
   try {
     res.json({ events: await listPayPalEventsForMerchant(req.merchantId!) });
+  } catch (err) { next(err); }
+});
+
+// GET /v1/merchants/me/agent-comparisons — how often shopping agents recommended this store, and how often its rewards decided it
+router.get('/me/agent-comparisons', authenticateApiKeyOrB2BSession(['merchants:read']), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json(await comparisonStats(req.merchantId!, req.isSandbox ?? true));
   } catch (err) { next(err); }
 });
 

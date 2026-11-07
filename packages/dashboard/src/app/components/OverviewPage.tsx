@@ -2,9 +2,10 @@
 
 // Overview: what AI shopping agents bought from this store, in words anyone can
 // follow. How it works, the latest order as the shopper saw it, four numbers with
-// what they mean, recent orders, and who did what.
+// what they mean, why agents pick this store, recent orders, and who did what.
 import { useEffect, useMemo, useState } from "react";
-import type { CheckoutOrderView } from "@tokento/shared";
+import type { AgentComparisonStats, CheckoutOrderView, ComparisonOutcome } from "@tokento/shared";
+import { comparisonSummary } from "./agent-comparisons";
 import { maskShopper, orderStats, toOrderRow } from "./agent-orders";
 import { activityFeed, latestOrder, orderLifecycle, relativeTime, statusTone, usd, type ActivityItem, type LifecycleStep, type Tone } from "./overview-data";
 import type { Page } from "./Sidebar";
@@ -131,6 +132,10 @@ export function OverviewPage({
         <Stat label="Owed to you" value={usd(owedNet)} hint={owed && owed.fees > 0 ? `After ${usd(owed.fees)} Tokento fees · sent by PayPal Payouts` : "Sent to you by PayPal Payouts"} />
       </section>
 
+      {!activity.comparisonsFailed && (
+        <WhyAgentsPickYou stats={activity.comparisons} fresh={activity.comparisonsFresh} now={now} />
+      )}
+
       <div className="flex flex-wrap items-start gap-6">
         <section aria-labelledby="recent" className="min-w-0 flex-[999_1_560px]">
           <div className="mb-3 flex items-center">
@@ -165,6 +170,52 @@ export function OverviewPage({
         </aside>
       </div>
     </div>
+  );
+}
+
+const BAR: Record<ComparisonOutcome, string> = {
+  won_with_rewards: "bg-success",
+  won_on_price: "bg-brand-500",
+  not_chosen: "bg-surface-4",
+};
+
+function WhyAgentsPickYou({ stats, fresh, now }: { stats: AgentComparisonStats | null; fresh: boolean; now: Date }) {
+  if (!stats) return <div className="skeleton h-32" />;
+  const summary = comparisonSummary(stats);
+  const barLabel = summary.segments.map((seg) => `${seg.label}: ${seg.count}`).join(", ");
+  return (
+    <section aria-labelledby="why-agents" className="rounded-xl border border-border bg-surface-1 p-5">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h2 id="why-agents" className="text-base font-semibold">Why agents pick you</h2>
+        {stats.lastComparedAt && (
+          <span className="text-xs text-text-muted">Last comparison {relativeTime(stats.lastComparedAt, now)}</span>
+        )}
+      </div>
+      {/* Remounts on each new comparison so the wash replays while the agent shops. */}
+      <div key={stats.comparisons} className={`-mx-2 mt-2 rounded-lg px-2 py-1 ${fresh ? "ink-wash" : ""}`} aria-live="polite">
+        <p className="tabular text-xl font-semibold tracking-tight">{summary.headline}</p>
+        <p className="mt-1 text-sm text-text-muted">{summary.detail}</p>
+      </div>
+      {!summary.empty && (
+        <>
+          <div className="mt-4 flex h-2 overflow-hidden rounded-full bg-surface-3" role="img" aria-label={barLabel}>
+            {summary.segments.filter((seg) => seg.count > 0).map((seg) => (
+              <span key={seg.key} className={`${BAR[seg.key]} h-full`} style={{ width: `${seg.percent}%` }} />
+            ))}
+          </div>
+          <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[13px]">
+            {summary.segments.map((seg) => (
+              <li key={seg.key} className="flex items-center gap-1.5">
+                <span className={`h-2 w-2 flex-none rounded-full ${BAR[seg.key]}`} aria-hidden />
+                <span className="text-text-secondary">{seg.label}</span>
+                <span className="tabular font-mono">{seg.count}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      <p className="mt-3 text-xs text-text-muted">Counts only. Other stores&apos; names and prices stay private.</p>
+    </section>
   );
 }
 

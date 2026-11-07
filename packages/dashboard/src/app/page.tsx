@@ -438,6 +438,7 @@ export default function Dashboard() {
         "paypal.webhook",
         "settlement.created",
         "settlement.updated",
+        "agent.compared",
       ]) {
         es.addEventListener(type, (e) => {
           setLastEventAt(new Date().toISOString());

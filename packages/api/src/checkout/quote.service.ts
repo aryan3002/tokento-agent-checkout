@@ -8,6 +8,7 @@ import { AppError } from '../middleware/error.middleware';
 import { mandateService } from '../mandates/mandate.service';
 import { toMoneyNumber } from '../utils/money';
 import { describeComparison, describeOffer, priceOffer, rankOffers, usd, type OfferPrice } from './pricing';
+import { recordComparison } from './agent-comparisons';
 
 export type ProductWithMerchant = Product & { merchant: { id: string; name: string } };
 
@@ -158,8 +159,12 @@ export class QuoteService {
       subtotal: p.subtotal,
       price: p.price,
     })));
+    const recommendedProductId = recommended?.productId ?? null;
 
-    return { offers, recommendedProductId: recommended?.productId ?? null, comparison };
+    // How each store did, for its "why agents pick you" numbers. Never fails the quote.
+    await recordComparison({ offers, recommendedProductId, quantity, isSandbox });
+
+    return { offers, recommendedProductId, comparison };
   }
 }
 

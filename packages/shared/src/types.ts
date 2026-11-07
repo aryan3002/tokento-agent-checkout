@@ -302,6 +302,8 @@ export enum EventType {
   SETTLEMENT_CREATED = 'settlement.created',
   SETTLEMENT_UPDATED = 'settlement.updated',
   PAYPAL_WEBHOOK = 'paypal.webhook',
+  /** A shopper's agent compared this store with others (one event per store, with its own outcome only). */
+  AGENT_COMPARED = 'agent.compared',
 }
 
 // ---- Agent checkout (PayPal) ----
@@ -363,6 +365,26 @@ export interface QuoteResponse {
   offers: OfferView[];
   recommendedProductId: string | null;
   comparison: string;
+}
+
+/**
+ * How one store did in one agent comparison of two or more stores.
+ * won_with_rewards: recommended although another store had a lower sticker price.
+ * won_on_price: recommended and no other store had a lower sticker price.
+ * not_chosen: another store was recommended, or no offer fit the budget.
+ */
+export type ComparisonOutcome = 'won_with_rewards' | 'won_on_price' | 'not_chosen';
+
+/** How often shopping agents recommended a store when they compared it with other stores. All time, this environment. */
+export interface AgentComparisonStats {
+  /** Agent comparisons of two or more stores that included this store. */
+  comparisons: number;
+  /** wonWithRewards + wonOnPrice. */
+  recommended: number;
+  wonWithRewards: number;
+  wonOnPrice: number;
+  notChosen: number;
+  lastComparedAt: string | null;
 }
 
 export type SettlementState = 'unsettled' | 'processing' | 'paid' | 'failed';

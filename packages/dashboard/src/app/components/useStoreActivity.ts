@@ -1,10 +1,10 @@
 "use client";
 
-// The store's agent orders, verified PayPal events and payouts, loaded once and
-// kept live from the dashboard's one event stream. Overview and PayPal activity
-// read from here.
+// The store's agent orders, verified PayPal events, payouts and agent comparison
+// counts, loaded once and kept live from the dashboard's one event stream. Overview
+// and PayPal activity read from here.
 import { useCallback, useEffect, useState } from "react";
-import type { CheckoutOrderView, PayPalEventView, SettlementPreview, SettlementView } from "@tokento/shared";
+import type { AgentComparisonStats, CheckoutOrderView, PayPalEventView, SettlementPreview, SettlementView } from "@tokento/shared";
 import { eventFromStream, prependEvent, upsertById, type PayPalWebhookMessage } from "./agent-orders";
 import type { StreamEvent } from "./AgentOrdersTab";
 
@@ -17,6 +17,12 @@ export interface StoreActivity {
   payouts: SettlementView[] | null;
   owed: SettlementPreview | null;
   freshEventIds: Set<string>;
+  /** null while loading. */
+  comparisons: AgentComparisonStats | null;
+  /** The counts couldn't be loaded; the card stays hidden rather than showing wrong numbers. */
+  comparisonsFailed: boolean;
+  /** True for a moment after a live comparison changed the counts. */
+  comparisonsFresh: boolean;
   loadError: string | null;
   refreshPayouts: () => Promise<void>;
 }
@@ -28,6 +34,14 @@ export function useStoreActivity(request: Request, subscribe: Subscribe): StoreA
   const [owed, setOwed] = useState<SettlementPreview | null>(null);
   const [freshEventIds, setFreshEventIds] = useState<Set<string>>(() => new Set());
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [comparisons, setComparisons] = useState<AgentComparisonStats | null>(null);
+  const [comparisonsFailed, setComparisonsFailed] = useState(false);
+  const [comparisonsFresh, setComparisonsFresh] = useState(false);
+
+  const loadComparisons = useCallback(
+    () => request<AgentComparisonStats>("/api/v1/merchants/me/agent-comparisons"),
+    [request],
+  );
 
   const refreshPayouts = useCallback(async () => {
     const [preview, list] = await Promise.all([
@@ -49,8 +63,11 @@ export function useStoreActivity(request: Request, subscribe: Subscribe): StoreA
     void Promise.resolve()
       .then(refreshPayouts)
       .catch(() => { if (!stale) setPayouts([]); });
+    loadComparisons()
+      .then((res) => { if (!stale) setComparisons(res); })
+      .catch(() => { if (!stale) setComparisonsFailed(true); });
     return () => { stale = true; };
-  }, [request, refreshPayouts]);
+  }, [request, refreshPayouts, loadComparisons]);
 
   useEffect(
     () =>
@@ -70,9 +87,19 @@ export function useStoreActivity(request: Request, subscribe: Subscribe): StoreA
         if (type.startsWith("settlement.") || type === "checkout.completed" || type === "checkout.refunded") {
           refreshPayouts().catch(() => {});
         }
+        if (type === "agent.compared") {
+          loadComparisons()
+            .then((res) => {
+              setComparisons(res);
+              setComparisonsFailed(false);
+              setComparisonsFresh(true);
+              setTimeout(() => setComparisonsFresh(false), 1600);
+            })
+            .catch(() => {});
+        }
       }),
-    [subscribe, request, refreshPayouts],
+    [subscribe, request, refreshPayouts, loadComparisons],
   );
 
-  return { orders, events, payouts, owed, freshEventIds, loadError, refreshPayouts };
+  return { orders, events, payouts, owed, freshEventIds, comparisons, comparisonsFailed, comparisonsFresh, loadError, refreshPayouts };
 }
