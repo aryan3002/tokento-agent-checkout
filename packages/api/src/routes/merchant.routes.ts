@@ -5,6 +5,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { refundOrder } from '../checkout/refund';
 import { checkoutService } from '../checkout/checkout.service';
 import { listPayPalEventsForMerchant } from '../checkout/paypal-events';
+import { settlementService } from '../settlement/settlement.service';
 import { z } from 'zod';
 import { merchantService } from '../services/merchant.service';
 import { authenticateApiKeyOrB2BSession } from '../middleware/auth.middleware';
@@ -124,6 +125,27 @@ router.get('/me/orders/:id', authenticateApiKeyOrB2BSession(['tokens:read']), as
 router.get('/me/paypal-events', authenticateApiKeyOrB2BSession(['tokens:read']), async (req: Request, res: Response, next: NextFunction) => {
   try {
     res.json({ events: await listPayPalEventsForMerchant(req.merchantId!) });
+  } catch (err) { next(err); }
+});
+
+// GET /v1/merchants/me/settlements — PayPal payouts to this store, newest first
+router.get('/me/settlements', authenticateApiKeyOrB2BSession(['merchants:read']), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({ settlements: await settlementService.list(req.merchantId!) });
+  } catch (err) { next(err); }
+});
+
+// GET /v1/merchants/me/settlements/preview — what "Settle now" would pay
+router.get('/me/settlements/preview', authenticateApiKeyOrB2BSession(['merchants:read']), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json(await settlementService.preview(req.merchantId!));
+  } catch (err) { next(err); }
+});
+
+// POST /v1/merchants/me/settlements — "Settle now": one PayPal Payouts batch
+router.post('/me/settlements', authenticateApiKeyOrB2BSession(['merchants:write']), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(201).json(await settlementService.settle(req.merchantId!));
   } catch (err) { next(err); }
 });
 

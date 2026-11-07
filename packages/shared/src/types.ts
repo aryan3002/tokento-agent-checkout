@@ -424,3 +424,35 @@ export interface MandateView {
   createdAt: string;
   revokedAt: string | null;
 }
+
+export type SettlementBatchStatus = 'PENDING' | 'PROCESSING' | 'SUCCESS' | 'DENIED' | 'FAILED';
+
+/** One PayPal Payouts batch to a store. Amounts in USD. */
+export interface SettlementView {
+  id: string;
+  status: SettlementBatchStatus;
+  orders: number;
+  gross: number;
+  fees: number;
+  /** Refunds of orders that were already paid out, taken off this batch. */
+  refundAdjustments: number;
+  net: number;
+  receiverEmail: string;
+  paypalPayoutBatchId: string | null;
+  /** The redemption settlement references of the orders this batch pays for. */
+  settlementRefs: string[];
+  error: string | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+/** What "Settle now" would pay the store right now. */
+export interface SettlementPreview {
+  orders: number;
+  gross: number;
+  fees: number;
+  refundAdjustments: number;
+  net: number;
+  payable: boolean;
+  receiverEmail: string | null;
+}

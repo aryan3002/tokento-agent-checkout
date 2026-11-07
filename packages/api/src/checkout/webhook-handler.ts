@@ -14,6 +14,7 @@ import { checkoutService } from './checkout.service';
 import { finalizeCapture } from './finalize';
 import { applyRefund } from './refund';
 import { getPayPal } from './paypal';
+import { settlementService } from '../settlement/settlement.service';
 
 export interface PayPalWebhookEvent {
   id: string;
@@ -103,6 +104,16 @@ async function onRefundEvent(event: PayPalWebhookEvent): Promise<HandlerOutcome>
 }
 
 /** Event type → handler. Payouts handlers register themselves here. */
+/** Payouts batch events: the batch id is in resource.batch_header; the status is the event type's last word. */
+async function onPayoutBatchEvent(event: PayPalWebhookEvent): Promise<HandlerOutcome> {
+  const header = (event.resource as { batch_header?: { payout_batch_id?: string } } | undefined)?.batch_header;
+  const payoutBatchId = header?.payout_batch_id;
+  if (!payoutBatchId) return { action: 'ignored' };
+  const status = event.event_type.split('.').pop() ?? '';
+  const batch = await settlementService.applyPayoutUpdate(payoutBatchId, status);
+  return batch ? { action: `settlement_${batch.status.toLowerCase()}`, merchantId: batch.merchantId } : { action: 'ignored' };
+}
+
 export const webhookHandlers: Record<string, WebhookHandler> = {
   'CHECKOUT.ORDER.APPROVED': onOrderApproved,
   'PAYMENT.CAPTURE.COMPLETED': onCaptureEvent,
@@ -111,6 +122,9 @@ export const webhookHandlers: Record<string, WebhookHandler> = {
   'PAYMENT.CAPTURE.DECLINED': onCaptureEvent,
   'PAYMENT.CAPTURE.REFUNDED': onRefundEvent,
   'PAYMENT.CAPTURE.REVERSED': onRefundEvent,
+  'PAYMENT.PAYOUTSBATCH.SUCCESS': onPayoutBatchEvent,
+  'PAYMENT.PAYOUTSBATCH.DENIED': onPayoutBatchEvent,
+  'PAYMENT.PAYOUTSBATCH.PROCESSING': onPayoutBatchEvent,
 };
 
 function parseEvent(body: unknown): PayPalWebhookEvent | null {
@@ -118,6 +132,14 @@ function parseEvent(body: unknown): PayPalWebhookEvent | null {
   const e = body as Record<string, unknown>;
   if (typeof e.id !== 'string' || typeof e.event_type !== 'string') return null;
   return e as unknown as PayPalWebhookEvent;
+}
+
+/** Most resources carry an id; a Payouts batch carries batch_header.payout_batch_id instead. */
+function resourceIdOf(event: PayPalWebhookEvent): string | null {
+  const resource = event.resource as { id?: unknown; batch_header?: { payout_batch_id?: unknown } } | undefined;
+  if (typeof resource?.id === 'string') return resource.id;
+  const batchId = resource?.batch_header?.payout_batch_id;
+  return typeof batchId === 'string' ? batchId : null;
 }
 
 function isUniqueViolation(err: unknown): boolean {
@@ -156,7 +178,7 @@ export async function receivePayPalWebhook(input: { headers: IncomingHttpHeaders
         data: {
           id: event.id,
           eventType: event.event_type,
-          resourceId: typeof event.resource?.id === 'string' ? event.resource.id : null,
+          resourceId: resourceIdOf(event),
           verified: true,
           payload: input.body as Prisma.InputJsonValue,
         },

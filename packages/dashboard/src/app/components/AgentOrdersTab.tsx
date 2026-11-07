@@ -7,9 +7,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgGridReact } from "ag-grid-react";
 import {
-  AllCommunityModule,
-  ModuleRegistry,
-  themeQuartz,
   type ColDef,
   type GetRowIdParams,
   type GridApi,
@@ -28,31 +25,8 @@ import {
   type AgentOrderRow,
   type PayPalWebhookMessage,
 } from "./agent-orders";
+import { ledgerTheme } from "./grid-theme";
 import { PayPalEventsFeed } from "./PayPalEventsFeed";
-
-ModuleRegistry.registerModules([AllCommunityModule]);
-
-// The dashboard's ledger palette: paper, ink, one terracotta accent.
-const ledgerTheme = themeQuartz.withParams({
-  browserColorScheme: "light",
-  backgroundColor: "#faf7f0",
-  foregroundColor: "#0f0f0e",
-  borderColor: "#d6cfbf",
-  accentColor: "#b85042",
-  headerBackgroundColor: "#efe9dc",
-  headerTextColor: "#6b6759",
-  oddRowBackgroundColor: "#f5f1e8",
-  rowHoverColor: "#efe9dc",
-  pinnedRowBackgroundColor: "#efe9dc",
-  pinnedRowFontWeight: 600,
-  valueChangeValueHighlightBackgroundColor: "rgba(184, 80, 66, 0.22)",
-  fontFamily: "var(--font-body), ui-sans-serif, system-ui, sans-serif",
-  headerFontFamily: "var(--font-mono-ui), ui-monospace, monospace",
-  fontSize: 13,
-  headerFontSize: 11,
-  wrapperBorderRadius: 2,
-  borderRadius: 2,
-});
 
 export type StreamEvent = { type: string; payload: Record<string, unknown> };
 type Request = <T>(path: string, init?: RequestInit) => Promise<T>;

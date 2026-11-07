@@ -1,4 +1,4 @@
-// Verified PayPal webhooks that concern one store's orders, for the dashboard
+// Verified PayPal webhooks that concern one store's orders and payouts, for the dashboard
 // feed. Unverified deliveries are rejected before they are stored (see
 // webhook-handler.ts), so every event listed here passed PayPal's signature check.
 import type { PayPalEventView } from '@tokento/shared';
@@ -18,10 +18,17 @@ export async function listPayPalEventsForMerchant(merchantId: string, limit = 50
       if (resourceId) orderByResource.set(resourceId, order.id);
     }
   }
-  if (orderByResource.size === 0) return [];
+  // Payout events name the store's Payouts batch.
+  const payouts = await prisma.settlementBatch.findMany({
+    where: { merchantId, paypalPayoutBatchId: { not: null } },
+    select: { paypalPayoutBatchId: true },
+    take: 200,
+  });
+  const resourceIds = [...orderByResource.keys(), ...payouts.map((p) => p.paypalPayoutBatchId!)];
+  if (resourceIds.length === 0) return [];
 
   const events = await prisma.paypalWebhookEvent.findMany({
-    where: { resourceId: { in: [...orderByResource.keys()] } },
+    where: { resourceId: { in: resourceIds } },
     orderBy: { receivedAt: 'desc' },
     take: Math.min(Math.max(limit, 1), 100),
   });

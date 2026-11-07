@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, FormEvent } from "react";
 import { FirstRun } from "./components/FirstRun";
 import { AgentOrdersTab, type StreamEvent } from "./components/AgentOrdersTab";
+import { PayoutsTab } from "./components/PayoutsTab";
 
 // All API traffic goes through the same-origin server proxy at /api/proxy, which
 // attaches the merchant API key server-side. No credential is shipped to the browser.
@@ -98,7 +99,7 @@ type WebhookDelivery = {
   createdAt: string;
 };
 
-type Tab = "overview" | "agent-orders" | "tokens" | "rules" | "redemptions" | "webhooks" | "settings" | "demo" | "status";
+type Tab = "overview" | "agent-orders" | "payouts" | "tokens" | "rules" | "redemptions" | "webhooks" | "settings" | "demo" | "status";
 
 type ConnectionState = "connecting" | "live" | "down";
 type LoginStatus = "idle" | "sending" | "sent" | "error";
@@ -106,13 +107,14 @@ type LoginStatus = "idle" | "sending" | "sent" | "error";
 const TAB_DEFS: { key: Tab; label: string; icon: string }[] = [
   { key: "overview", label: "Overview", icon: "01" },
   { key: "agent-orders", label: "Agent Orders", icon: "02" },
-  { key: "tokens", label: "Tokens", icon: "03" },
-  { key: "rules", label: "Earn Rules", icon: "04" },
-  { key: "redemptions", label: "Redemptions", icon: "05" },
-  { key: "webhooks", label: "Webhooks", icon: "06" },
-  { key: "settings", label: "Settings", icon: "07" },
-  { key: "demo", label: "Demo Wiring", icon: "08" },
-  { key: "status", label: "System Status", icon: "09" },
+  { key: "payouts", label: "Payouts", icon: "03" },
+  { key: "tokens", label: "Tokens", icon: "04" },
+  { key: "rules", label: "Earn Rules", icon: "05" },
+  { key: "redemptions", label: "Redemptions", icon: "06" },
+  { key: "webhooks", label: "Webhooks", icon: "07" },
+  { key: "settings", label: "Settings", icon: "08" },
+  { key: "demo", label: "Demo Wiring", icon: "09" },
+  { key: "status", label: "System Status", icon: "10" },
 ];
 
 const SERVICES = [
@@ -422,6 +424,8 @@ export default function Dashboard() {
         "checkout.cancelled",
         "checkout.refunded",
         "paypal.webhook",
+        "settlement.created",
+        "settlement.updated",
       ]) {
         es.addEventListener(type, (e) => {
           setLastEventAt(new Date().toISOString());
@@ -581,6 +585,7 @@ export default function Dashboard() {
             )
           )}
           {tab === "agent-orders" && <AgentOrdersTab request={api} subscribe={subscribeStream} />}
+          {tab === "payouts" && <PayoutsTab request={api} subscribe={subscribeStream} />}
           {tab === "tokens" && (
             <TokensTab tokens={tokens} earnRuleNameById={earnRuleNameById} flashTokenId={flashTokenId} />
           )}
