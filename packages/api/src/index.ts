@@ -30,6 +30,7 @@ import paypalWebhookRoutes from './routes/paypal-webhook.routes';
 import checkoutRoutes from './routes/checkout.routes';
 import catalogRoutes from './routes/catalog.routes';
 import mandateRoutes from './routes/mandate.routes';
+import demoRoutes from './routes/demo.routes';
 import { startCheckoutSweeper } from './jobs/checkout-sweeper';
 
 // Initialize webhook service (sets up event listeners)
@@ -39,7 +40,8 @@ import { usingPlaceholderB2BConfig, usingPlaceholderB2CConfig } from './services
 
 // Placeholder Stytch credentials enable the dev-session token path, which lets a caller
 // name its own principal. Refuse to boot rather than serve production traffic that way.
-if (process.env.NODE_ENV === 'production' && (usingPlaceholderB2CConfig() || usingPlaceholderB2BConfig())) {
+// The hosted demo (DEMO_MODE=true) has no Stytch; dev sessions stay refused in production either way.
+if (process.env.NODE_ENV === 'production' && process.env.DEMO_MODE !== 'true' && (usingPlaceholderB2CConfig() || usingPlaceholderB2BConfig())) {
   throw new Error(
     'Refusing to start: placeholder Stytch credentials in production. Set STYTCH_PROJECT_ID/STYTCH_SECRET and STYTCH_B2B_PROJECT_ID/STYTCH_B2B_SECRET.',
   );
@@ -170,6 +172,7 @@ app.use(`${API_PREFIX}/paypal/webhooks`, paypalWebhookRoutes);
 app.use(`${API_PREFIX}/checkout`, checkoutRoutes);
 app.use(`${API_PREFIX}/catalog`, catalogRoutes);
 app.use(`${API_PREFIX}/mandates`, mandateRoutes);
+app.use(`${API_PREFIX}/demo`, demoRoutes);
 
 // ---- Error Handling ----
 app.use(notFoundHandler());

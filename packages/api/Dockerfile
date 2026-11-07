@@ -1,52 +1,25 @@
-# ============================================================
-# Tokento API
-# ============================================================
-# Targets a plain Node host (Railway / Render / Fly), NOT Cloudflare Workers.
-# The Express + Prisma + ioredis stack cannot run on Workers as-is — app.listen,
-# Prisma over raw TCP, ioredis sockets, long-lived SSE and post-response promises
-# all require a persistent Node process. Porting to Hono/Drizzle is deliberately
-# out of scope; revisit when a customer needs edge latency.
-
-FROM node:20-alpine AS base
-RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
+# Tokento API for the hosted demo (Azure Container Apps). Build from the repo root:
+#   docker build -f packages/api/Dockerfile .
+# Runs migrations, then the API on $PORT (4000). Redis runs as a sidecar container.
+FROM node:20-bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 WORKDIR /app
 
-# ---- Dependencies ----
-FROM base AS deps
-COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY packages/shared/package.json packages/shared/
+COPY packages/paypal/package.json packages/paypal/
 COPY packages/api/package.json packages/api/
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --filter "@tokento/api..."
 
-# ---- Build ----
-FROM base AS build
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
-COPY --from=deps /app/packages/api/node_modules ./packages/api/node_modules
-COPY . .
-RUN pnpm --filter @tokento/shared build \
- && pnpm --filter @tokento/api db:generate \
+COPY packages/shared packages/shared
+COPY packages/paypal packages/paypal
+COPY packages/api packages/api
+RUN pnpm --filter @tokento/api exec prisma generate \
+ && pnpm --filter @tokento/shared build \
+ && pnpm --filter @tokento/paypal build \
  && pnpm --filter @tokento/api build
 
-# ---- Runtime ----
-FROM base AS runtime
-ENV NODE_ENV=production
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/packages/shared ./packages/shared
-COPY --from=build /app/packages/api ./packages/api
-WORKDIR /app/packages/api
-
-# Run as a non-root user.
-RUN addgroup -S tokento && adduser -S tokento -G tokento
-USER tokento
-
+ENV NODE_ENV=production PORT=4000
 EXPOSE 4000
-
-# /health probes Postgres and Redis, so an instance with a dead dependency is
-# taken out of rotation rather than silently serving errors.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-
-# migrate deploy applies committed migrations; never db:push, which has no
-# migration history and no rollback path.
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+CMD ["sh", "-c", "cd packages/api && npx prisma migrate deploy && node dist/index.js"]

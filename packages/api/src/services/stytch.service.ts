@@ -1,4 +1,5 @@
 import { B2BClient, Client, envs } from 'stytch';
+import { demoModeOn, demoSecret, isDemoSessionToken, verifyDemoSession } from '../demo/demo-session';
 import prisma from '../db/client';
 
 const STYTCH_PROJECT_ID = process.env.STYTCH_PROJECT_ID || 'test-project';
@@ -125,6 +126,13 @@ export async function authenticateB2CSessionJwt(sessionJwt: string): Promise<{
   userId: string;
   fallback: boolean;
 }> {
+  if (isDemoSessionToken(sessionJwt)) {
+    // Hosted demo visitors: signed by the server, accepted only while DEMO_MODE=true.
+    const customerId = demoModeOn() ? verifyDemoSession(sessionJwt, demoSecret()) : null;
+    if (!customerId) throw new Error('demo_session_invalid');
+    return { customerId, userId: `demo:${customerId}`, fallback: true };
+  }
+
   const devSession = parseDevB2CToken(sessionJwt);
   if (devSession) {
     assertDevSessionAllowed('b2c');
