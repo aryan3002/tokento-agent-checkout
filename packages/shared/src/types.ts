@@ -407,3 +407,20 @@ export interface PayPalEventView {
   state: 'processed' | 'retrying' | 'received';
   receivedAt: string;
 }
+
+/** A shopper's spending limits for agent purchases, as the shopper app shows them. Amounts in USD. */
+export interface MandateView {
+  id: string;
+  status: 'ACTIVE' | 'REVOKED';
+  perPurchaseMax: number;
+  monthlyCap: number;
+  allowedStores: { id: string; name: string }[];
+  expiresAt: string;
+  /** Open and completed agent orders this calendar month (UTC); refunded, cancelled and failed don't count. */
+  spentThisMonth: number;
+  remainingThisMonth: number;
+  /** ACTIVE: PayPal is linked, so purchases inside the limits need no new approval. */
+  vault: { status: 'NONE' | 'PENDING_APPROVAL' | 'ACTIVE' | 'FAILED' };
+  createdAt: string;
+  revokedAt: string | null;
+}

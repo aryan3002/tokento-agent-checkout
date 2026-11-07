@@ -77,7 +77,8 @@ describe('quote', () => {
       amountToPay: 23,
       earn: { amount: 5 },
       effectiveCost: 18,
-      mandate: { within: true },
+      // No limits set: reported, so the agent knows each payment needs her PayPal approval.
+      mandate: { within: false, code: 'no_mandate' },
     });
     expect(quote.offers[1]).toMatchObject({ amountToPay: 26.5, reward: null, earn: { amount: 2 }, effectiveCost: 24.5 });
     expect(quote.offers[2]).toMatchObject({ amountToPay: 25, reward: null, earn: null, effectiveCost: 25 });

@@ -142,3 +142,15 @@ export const CatalogSearchSchema = z.object({
   maxPrice: z.coerce.number().positive().optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
+
+/** Dollars with at most two decimals, e.g. 30 or 22.99. */
+const usdAmount = z.number().positive().max(10_000).refine((v) => /^\d+(\.\d{1,2})?$/.test(String(v)), 'Use at most two decimals.');
+
+export const CreateMandateSchema = z
+  .object({
+    perPurchaseMax: usdAmount,
+    monthlyCap: usdAmount,
+    allowedMerchantIds: z.array(z.string().uuid()).min(1).max(20),
+    expiresInDays: z.number().int().min(1).max(365).default(30),
+  })
+  .refine((m) => m.perPurchaseMax <= m.monthlyCap, { message: 'The per-purchase maximum cannot be above the monthly cap.', path: ['perPurchaseMax'] });

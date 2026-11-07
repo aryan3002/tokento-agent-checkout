@@ -29,6 +29,7 @@ import authRoutes from './routes/auth.routes';
 import paypalWebhookRoutes from './routes/paypal-webhook.routes';
 import checkoutRoutes from './routes/checkout.routes';
 import catalogRoutes from './routes/catalog.routes';
+import mandateRoutes from './routes/mandate.routes';
 import { startCheckoutSweeper } from './jobs/checkout-sweeper';
 
 // Initialize webhook service (sets up event listeners)
@@ -168,6 +169,7 @@ app.use(`${API_PREFIX}/auth`, authRoutes);
 app.use(`${API_PREFIX}/paypal/webhooks`, paypalWebhookRoutes);
 app.use(`${API_PREFIX}/checkout`, checkoutRoutes);
 app.use(`${API_PREFIX}/catalog`, catalogRoutes);
+app.use(`${API_PREFIX}/mandates`, mandateRoutes);
 
 // ---- Error Handling ----
 app.use(notFoundHandler());

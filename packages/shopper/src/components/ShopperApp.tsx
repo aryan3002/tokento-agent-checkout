@@ -11,6 +11,7 @@ import { afterPayPal, loadTranscript, redirectOutcome, saveTranscript, streamTur
 import { addNotice, applyEvent, emptyTranscript, startTurn, syncOrders, upsertOrder, type Entry, type Transcript } from "@/lib/chat/transcript";
 import { TOOL_LABELS, usd } from "@/lib/format";
 import { CheckoutCard } from "./CheckoutCard";
+import { MandatePanel, type MandateData } from "./MandatePanel";
 import { OfferTable } from "./OfferTable";
 import { WalletPanel } from "./WalletPanel";
 
@@ -72,6 +73,7 @@ export function ShopperApp() {
   const [rewards, setRewards] = useState<RewardSummary[] | null>(null);
   const [totalValue, setTotalValue] = useState<number | null>(null);
   const [orders, setOrders] = useState<CheckoutOrderView[] | null>(null);
+  const [limits, setLimits] = useState<MandateData | null>(null);
   const [draft, setDraft] = useState("");
 
   // The conversation Claude needs next turn. A ref, so a queued message reads the latest one.
@@ -83,10 +85,12 @@ export function ShopperApp() {
   const endRef = useRef<HTMLDivElement>(null);
 
   const refreshSidebar = useCallback(async () => {
-    const [wallet, list] = await Promise.all([
+    const [wallet, list, mandate] = await Promise.all([
       getJson<{ rewards: RewardSummary[]; totalValue: number }>("/api/wallet"),
       getJson<{ orders: CheckoutOrderView[] }>("/api/orders"),
+      getJson<MandateData>("/api/mandate"),
     ]);
+    if (mandate) setLimits(mandate);
     if (wallet) {
       setRewards(wallet.rewards);
       setTotalValue(wallet.totalValue);
@@ -314,7 +318,8 @@ export function ShopperApp() {
           </form>
         </section>
 
-        <div className="md:sticky md:top-6 md:self-start">
+        <div className="space-y-6 md:sticky md:top-6 md:self-start">
+          <MandatePanel data={limits} onChanged={() => void refreshSidebar()} />
           <WalletPanel name={name ?? "Your"} rewards={rewards} totalValue={totalValue} orders={orders} />
         </div>
       </main>

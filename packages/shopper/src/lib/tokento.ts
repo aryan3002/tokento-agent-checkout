@@ -1,5 +1,5 @@
 // Server-side client for the Tokento API, acting with the shopper's session.
-import type { CheckoutOrderView, QuoteResponse } from "@tokento/shared";
+import type { CheckoutOrderView, MandateView, QuoteResponse } from "@tokento/shared";
 
 export class TokentoApiError extends Error {
   constructor(
@@ -100,7 +100,13 @@ export function tokentoClient(sessionToken: string, fetchImpl: FetchLike = fetch
       return call<CheckoutOrderView>("POST", `/checkout/orders/${encodeURIComponent(id)}/cancel`);
     },
     activeMandate() {
-      return call<{ mandate: unknown }>("GET", "/mandates/active");
+      return call<{ mandate: MandateView | null }>("GET", "/mandates/active");
+    },
+    createMandate(input: { perPurchaseMax: number; monthlyCap: number; allowedMerchantIds: string[]; expiresInDays: number }) {
+      return call<MandateView>("POST", "/mandates", { body: input });
+    },
+    revokeMandate(id: string) {
+      return call<MandateView>("POST", `/mandates/${encodeURIComponent(id)}/revoke`);
     },
   };
 }

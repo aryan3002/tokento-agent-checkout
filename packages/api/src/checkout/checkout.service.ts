@@ -88,7 +88,9 @@ export class CheckoutService {
       }
 
       const decision = await mandateService.evaluate(customerId, { merchantId: product.merchantId, amount: price.amountToPay });
-      if (!decision.within && input.paymentMode !== 'approval') {
+      // With no limits set, the shopper approves each payment in PayPal herself; only limits she set can be broken.
+      const outside = !decision.within && decision.code !== 'no_mandate';
+      if (outside && input.paymentMode !== 'approval') {
         throw new AppError(403, 'mandate_violation',
           `${decision.message} Ask the shopper first. If they agree, retry with paymentMode "approval" so they approve this payment in PayPal themselves.`,
           { mandateCode: decision.code });
@@ -110,7 +112,7 @@ export class CheckoutService {
             expectedEarn: price.earn?.amount ?? 0,
             status: CheckoutStatus.PENDING,
             paymentMode: 'approval',
-            outsideMandate: !decision.within,
+            outsideMandate: outside,
             mandateId: decision.mandate?.id ?? null,
             agentId: ctx.agentId ?? null,
             agentReason: input.agentReason?.slice(0, 500) ?? null,

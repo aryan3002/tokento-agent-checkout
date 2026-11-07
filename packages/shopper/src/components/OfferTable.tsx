@@ -32,7 +32,7 @@ export function OfferTable({ quote }: { quote: QuoteResponse }) {
                       <span className="font-medium">{o.merchantName}</span>
                       {best && <span className="rounded-sm border border-brand-500 px-1.5 text-[11px] uppercase tracking-wider text-brand-600">Best value</span>}
                       {o.withinBudget === false && <span className="text-[11px] uppercase tracking-wider text-text-muted">Over budget</span>}
-                      {!o.mandate.within && <span className="text-[11px] uppercase tracking-wider text-warning">Outside limits</span>}
+                      {!o.mandate.within && o.mandate.code !== "no_mandate" && <span className="text-[11px] uppercase tracking-wider text-warning">Outside limits</span>}
                     </div>
                     <div className="text-xs text-text-muted">{o.productName}</div>
                   </td>
