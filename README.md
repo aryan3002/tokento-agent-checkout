@@ -125,7 +125,7 @@ flowchart LR
 
 ### Tests
 
-313 tests pass: API 211, shopper 53, PayPal client 28, dashboard 15, MCP adapter 6. The checkout tests are integration tests against a real Postgres, with only PayPal faked at its HTTP boundary ([fake-paypal-client.ts](packages/api/tests/helpers/fake-paypal-client.ts)). `pnpm test` builds and runs everything, and CI runs typecheck, lint and the suite on pull requests to `main`.
+324 tests pass: API 211, shopper 53, PayPal client 28, dashboard 26, MCP adapter 6. The checkout tests are integration tests against a real Postgres, with only PayPal faked at its HTTP boundary ([fake-paypal-client.ts](packages/api/tests/helpers/fake-paypal-client.ts)). `pnpm test` builds and runs everything, and CI runs typecheck, lint and the suite on pull requests to `main`.
 
 The riskiest paths each have a named test:
 
@@ -150,15 +150,17 @@ The riskiest paths each have a named test:
 - The checkout card shows the math line by line, why this store, and the PayPal button. Once paid it becomes the receipt, with PayPal's capture id.
 - Side panels show the spending limits (with **Link PayPal once**), the rewards wallet and recent agent orders. The chat is saved per shopper, and coming back from PayPal returns to the same conversation.
 
-**Store dashboard.** Built with AG Grid Community.
+**Store dashboard.** A Geist-style layout in light and dark (it follows the system setting, or the switch in the sidebar), written so a store owner with no payments background can follow it.
 
-- **Agent Orders**: rows arrive and update live with `applyTransaction` from the server-sent event stream, changed cells flash, a pinned row totals paid orders, and you can filter by status, refund, or hover a product to read the agent's reason. Stat cards show sales, what PayPal collected and rewards spent and earned. See [AgentOrdersTab.tsx](packages/dashboard/src/app/components/AgentOrdersTab.tsx).
-- **PayPal webhooks**: every event, its verification and whether it was processed. See [PayPalEventsFeed.tsx](packages/dashboard/src/app/components/PayPalEventsFeed.tsx).
-- **Payouts**: what the store is owed, a Settle now button, and one row per PayPal Payouts batch with its live status. See [PayoutsTab.tsx](packages/dashboard/src/app/components/PayoutsTab.tsx).
+- **Overview**: a three-step "how it works" strip, the latest agent order as the shopper saw it with each PayPal step spelled out ("Shopper approved in PayPal", "PayPal confirmed the payment", "Paid out to you"), four numbers that each say what they mean, recent orders, and an activity feed that says who did what. See [OverviewPage.tsx](packages/dashboard/src/app/components/OverviewPage.tsx) and its logic in [overview-data.ts](packages/dashboard/src/app/components/overview-data.ts).
+- **Agent orders** (AG Grid Community): rows arrive and update live with `applyTransaction` from the server-sent event stream, changed cells flash, a pinned row totals paid orders, statuses show as a dot plus words, and each row says why the agent chose the store. Refund from the row. See [AgentOrdersTab.tsx](packages/dashboard/src/app/components/AgentOrdersTab.tsx).
+- **Payouts** (AG Grid): what the store is owed, a Settle now button, and one row per PayPal Payouts batch with its live status. See [PayoutsTab.tsx](packages/dashboard/src/app/components/PayoutsTab.tsx).
+- **PayPal activity**: every verified PayPal message about the store's orders. See [PayPalEventsFeed.tsx](packages/dashboard/src/app/components/PayPalEventsFeed.tsx).
+- A sidebar with quick find (press F) that collapses to icons; developer pages (connecting an agent, webhooks, system status) sit in their own group. See [Sidebar.tsx](packages/dashboard/src/app/components/Sidebar.tsx).
 
-![Agent Orders in AG Grid with verified PayPal webhooks](docs/images/dashboard-agent-orders.jpg)
+![Dashboard overview: how it works, the latest agent order and its PayPal steps](docs/images/dashboard-overview.jpg)
 
-![Payouts: the store paid through a PayPal Payouts batch](docs/images/dashboard-payouts.jpg)
+![Agent orders in AG Grid, light theme](docs/images/dashboard-agent-orders.jpg)
 
 ## Impact
 

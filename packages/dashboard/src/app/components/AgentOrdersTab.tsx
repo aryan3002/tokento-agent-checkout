@@ -203,7 +203,7 @@ export function AgentOrdersTab({ request, subscribe }: { request: Request; subsc
         cellClass: (p) => (typeof p.value === "number" ? "tabular text-warning" : "tabular text-text-muted"),
         valueFormatter: (p) => (typeof p.value === "number" ? `−${usd(p.value)}` : "—"),
       },
-      { field: "paid", headerName: "Paid via PayPal", width: 128, type: "rightAligned", cellClass: "tabular font-semibold", valueFormatter: money },
+      { field: "paid", headerName: "Paid via PayPal", width: 144, type: "rightAligned", cellClass: "tabular font-semibold", valueFormatter: money },
       {
         field: "earned",
         headerName: "Reward earned",
