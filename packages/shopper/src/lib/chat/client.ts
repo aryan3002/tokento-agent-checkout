@@ -114,6 +114,36 @@ export async function finishRedirect(page: "return" | "cancel", search: string, 
   return page === "return" ? `/?paid=${id}` : `/?cancelled=${id}`;
 }
 
+export type CardNotice = { tone: "info" | "error"; text: string };
+
+/**
+ * Cancel from a checkout card. If PayPal already moved the order on (approved in
+ * another tab, or captured by the webhook), the API answers 409: read the order's
+ * real state so the card stops offering the PayPal button.
+ */
+export async function cancelFromCard(id: string, fetchImpl: Fetch): Promise<{ order: CheckoutOrderView | null; notice: CardNotice | null }> {
+  try {
+    const res = await fetchImpl(`/api/orders/${id}/cancel`, { method: "POST" });
+    const body = await res.json().catch(() => ({}));
+    if (res.ok) return { order: body as CheckoutOrderView, notice: null };
+    if (res.status === 409) {
+      const list = await fetchImpl("/api/orders", { method: "GET" });
+      const { orders = [] } = (await list.json().catch(() => ({}))) as { orders?: CheckoutOrderView[] };
+      const fresh = orders.find((o) => o.id === id) ?? null;
+      const paid = fresh && ["COMPLETED", "CAPTURED", "CAPTURE_PENDING"].includes(fresh.status);
+      return {
+        order: fresh,
+        notice: paid
+          ? { tone: "info", text: "PayPal already has this payment, so it can't be cancelled here." }
+          : { tone: "error", text: (body as { error?: { message?: string } }).error?.message ?? "This order can no longer be cancelled." },
+      };
+    }
+    return { order: null, notice: { tone: "error", text: (body as { error?: { message?: string } }).error?.message ?? "Something went wrong." } };
+  } catch {
+    return { order: null, notice: { tone: "error", text: "Couldn't reach the store. Try again." } };
+  }
+}
+
 export type AfterPayPal = { autoSend?: string; notice?: { text: string; tone: "info" | "error" } };
 
 /** What the chat does once the shopper is back from PayPal, based on the order's real status. */

@@ -19,6 +19,8 @@ export const DEFAULT_DEMO_TEMPLATE: DemoTemplate = {
 };
 
 export async function provisionDemoShopper(template: DemoTemplate = DEFAULT_DEMO_TEMPLATE, now: Date = new Date()) {
+  // Check the signing secret before writing anything: a misconfigured server must not leave half-made shoppers.
+  const secret = demoSecret();
   const customerId = randomUUID();
   const expiresAt = new Date(now.getTime() + SESSION_DAYS * 86_400_000);
 
@@ -54,5 +56,5 @@ export async function provisionDemoShopper(template: DemoTemplate = DEFAULT_DEMO
     });
   });
 
-  return { customerId, token: signDemoSession(customerId, expiresAt, demoSecret()), expiresAt: expiresAt.toISOString() };
+  return { customerId, token: signDemoSession(customerId, expiresAt, secret), expiresAt: expiresAt.toISOString() };
 }

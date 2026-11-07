@@ -6,6 +6,7 @@ import { PayPalOneTimePaymentButton } from "@paypal/react-paypal-js/sdk-v6";
 import type { CheckoutOrderView } from "@tokento/shared";
 import { usd } from "@/lib/format";
 import { DASHBOARD_URL, storeViewUrl } from "@/lib/store-link";
+import { cancelFromCard, type CardNotice } from "@/lib/chat/client";
 
 const WAITING = ["CREATED", "APPROVED"];
 
@@ -28,6 +29,7 @@ export function CheckoutCard({
   onPaid: (order: CheckoutOrderView) => void;
 }) {
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<CardNotice | null>(null);
   const [busy, setBusy] = useState(false);
   const waiting = WAITING.includes(order.status);
   const paid = order.status === "COMPLETED";
@@ -36,13 +38,11 @@ export function CheckoutCard({
   async function cancel() {
     setBusy(true);
     setError(null);
-    try {
-      onOrder(await post(`/api/orders/${order.id}/cancel`));
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
+    setNotice(null);
+    const result = await cancelFromCard(order.id, (url, init) => fetch(url, init));
+    if (result.order) onOrder(result.order);
+    setNotice(result.notice);
+    setBusy(false);
   }
 
   return (
@@ -126,6 +126,7 @@ export function CheckoutCard({
         </a>
       )}
       {error && <p className="mt-2 text-sm text-error">{error}</p>}
+      {notice && <p className={`mt-2 text-sm ${notice.tone === "error" ? "text-error" : "text-text-secondary"}`}>{notice.text}</p>}
     </div>
   );
 }

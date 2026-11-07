@@ -81,6 +81,13 @@ describe('demo sessions', () => {
 });
 
 describe('demo shoppers', () => {
+  it('creates nothing when the server has no usable session secret', async () => {
+    vi.stubEnv('JWT_SECRET', 'change-me');
+    const before = await prisma.token.count({ where: { merchantId: coffee.merchantId } });
+    await expect(provisionDemoShopper(template(), new Date())).rejects.toThrow(/JWT_SECRET/);
+    expect(await prisma.token.count({ where: { merchantId: coffee.merchantId } })).toBe(before);
+  });
+
   it("start with Maya's two rewards and $30 / $100 spending limits on the demo stores", async () => {
     const shopper = await newDemoShopper();
 
