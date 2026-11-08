@@ -126,7 +126,7 @@ flowchart LR
 
 ### Tests
 
-415 tests pass: API 247, shopper 79, dashboard 46, PayPal client 28, MCP adapter 15. The checkout tests are integration tests against a real Postgres, with only PayPal faked at its HTTP boundary ([fake-paypal-client.ts](packages/api/tests/helpers/fake-paypal-client.ts)). `pnpm test` builds and runs everything, and CI runs typecheck, lint and the suite on pull requests to `main`.
+418 tests pass: API 250, shopper 79, dashboard 46, PayPal client 28, MCP adapter 15. The checkout tests are integration tests against a real Postgres, with only PayPal faked at its HTTP boundary ([fake-paypal-client.ts](packages/api/tests/helpers/fake-paypal-client.ts)). `pnpm test` builds and runs everything, and CI runs typecheck, lint and the suite on pull requests to `main`.
 
 The riskiest paths each have a named test:
 
