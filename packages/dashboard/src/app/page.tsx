@@ -1338,7 +1338,11 @@ function DemoTab({ merchant }: { merchant: Merchant | null }) {
     mcpServers: {
       tokento: {
         command: "node",
-        args: ["<absolute-path-to>/Token/mcp-proxy.js"],
+        args: ["<absolute-path-to>/packages/mcp-adapter/bridge/claude-desktop.mjs"],
+        env: {
+          TOKENTO_MCP_URL: "http://127.0.0.1:8787",
+          TOKENTO_WALLET_TOKEN: "<the shopper's wallet_token>",
+        },
       },
     },
   }, null, 2), []);
@@ -1386,7 +1390,7 @@ function DemoTab({ merchant }: { merchant: Merchant | null }) {
       </div>
 
       <div className="glass rounded-xl p-5">
-        <h3 className="font-semibold mb-2">2 — Wire Claude Desktop to the MCP proxy</h3>
+        <h3 className="font-semibold mb-2">2 — Wire Claude Desktop to the MCP bridge</h3>
         <p className="text-sm text-text-secondary mb-3">
           Add this to <code className="bg-surface-3 px-1 rounded">~/Library/Application Support/Claude/claude_desktop_config.json</code> and
           restart Claude Desktop:
@@ -1395,7 +1399,7 @@ function DemoTab({ merchant }: { merchant: Merchant | null }) {
 {claudeConfig}
         </pre>
         <p className="text-xs text-text-muted mt-3">
-          The proxy bridges Claude&apos;s stdio to the local Cloudflare Worker (<code className="bg-surface-3 px-1 rounded">mcp-proxy.js</code>).
+          The bridge connects Claude&apos;s stdio to the Cloudflare Worker (<code className="bg-surface-3 px-1 rounded">pnpm --filter @tokento/mcp-adapter dev:hosted</code> runs it against the hosted API). With <code className="bg-surface-3 px-1 rounded">TOKENTO_WALLET_TOKEN</code> set, the token stays out of the chat.
         </p>
       </div>
 

@@ -126,7 +126,7 @@ flowchart LR
 
 ### Tests
 
-418 tests pass: API 250, shopper 79, dashboard 46, PayPal client 28, MCP adapter 15. The checkout tests are integration tests against a real Postgres, with only PayPal faked at its HTTP boundary ([fake-paypal-client.ts](packages/api/tests/helpers/fake-paypal-client.ts)). `pnpm test` builds and runs everything, and CI runs typecheck, lint and the suite on pull requests to `main`.
+425 tests pass: API 250, shopper 79, dashboard 46, PayPal client 28, MCP adapter 22. The checkout tests are integration tests against a real Postgres, with only PayPal faked at its HTTP boundary ([fake-paypal-client.ts](packages/api/tests/helpers/fake-paypal-client.ts)). `pnpm test` builds and runs everything, and CI runs typecheck, lint and the suite on pull requests to `main`.
 
 The riskiest paths each have a named test:
 
@@ -293,7 +293,7 @@ Later commits (this README onward) are in `git log`.
 - **Rewards are per store.** Spending one store's reward at another store is on the roadmap, not built.
 - **Payouts run when the store clicks Settle now.** There is no scheduled settlement in the demo.
 - **Refunds** are covered by integration tests; the live sandbox runs so far covered purchases, Link PayPal once and Payouts.
-- **The MCP adapter** (wallet and checkout tools) is tested and was run end to end against a local API, but the hosted demo doesn't run the MCP Worker: run it locally with Wrangler and `mcp-proxy.js`.
+- **The MCP adapter isn't hosted.** You run the Worker on your machine (it calls the hosted API), and Claude Desktop reaches it through a small stdio bridge; see [Use it from Claude Desktop](#use-it-from-claude-desktop).
 - **Carried over from the platform:** one API replica, Redis as a cache only, no transactional outbox for outgoing store webhooks, no HMAC key rotation, and rate limits as the only fraud control.
 
 ## The Tokento platform underneath
@@ -307,6 +307,33 @@ Tokento makes store loyalty usable by AI agents. Stores issue signed rewards thr
 | `POST` | `/api/v1/tokens/{id}/redeem` | Atomic, idempotent redemption |
 
 Agent checkout adds its own routes for checkout, webhooks, limits and settlement; the TQI itself stays three endpoints. The MCP adapter offers the same three as tools (`query_loyalty_tokens`, `validate_token`, `redeem_token`) and agent checkout as four more (`search_products`, `compare_offers`, `start_checkout`, `get_order_status`), so any MCP client, Claude Desktop for example, can shop with the shopper's rewards and pay with PayPal while Tokento does every calculation and enforces every limit ([`packages/mcp-adapter/src/index.ts`](packages/mcp-adapter/src/index.ts)).
+
+### Use it from Claude Desktop
+
+Claude Desktop runs local MCP servers over stdin/stdout, and the adapter is an HTTP Worker, so [`bridge/claude-desktop.mjs`](packages/mcp-adapter/bridge/claude-desktop.mjs) sits between them (plain Node, no dependencies).
+
+1. Start the Worker against the hosted API: `pnpm --filter @tokento/mcp-adapter dev:hosted` (port 8787).
+2. Get a demo shopper's wallet token: `curl -X POST https://tokento-api.wittybush-ac01d507.centralus.azurecontainerapps.io/api/v1/demo/shoppers` (the `token` field; it lasts 7 days).
+3. Add this to `~/Library/Application Support/Claude/claude_desktop_config.json` (Windows: `%APPDATA%\Claude\claude_desktop_config.json`), then quit and reopen Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "tokento": {
+      "command": "node",
+      "args": ["/absolute/path/to/packages/mcp-adapter/bridge/claude-desktop.mjs"],
+      "env": {
+        "TOKENTO_MCP_URL": "http://127.0.0.1:8787",
+        "TOKENTO_WALLET_TOKEN": "<the token from step 2>"
+      }
+    }
+  }
+}
+```
+
+4. Ask Claude something like "Reorder my usual coffee beans with the best total value, using my rewards." It calls `search_products`, `compare_offers` and `start_checkout`, and gives you a PayPal sandbox link to approve. The order shows up on the store dashboard like any other.
+
+With `TOKENTO_WALLET_TOKEN` set, the bridge sends the token on every call and hides the `wallet_token` argument from the model, so the token never appears in the chat and the model can't substitute another shopper's.
 
 Invariants the whole codebase keeps:
 

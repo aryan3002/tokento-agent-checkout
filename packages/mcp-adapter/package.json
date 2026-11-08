@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "wrangler dev",
+    "dev:hosted": "wrangler dev --port 8787 --var API_BASE_URL:https://tokento-api.wittybush-ac01d507.centralus.azurecontainerapps.io",
     "deploy": "wrangler deploy",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
