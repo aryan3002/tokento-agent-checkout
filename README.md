@@ -4,7 +4,7 @@ An AI shopping agent spends the shopper's store rewards, PayPal pays the rest, t
 
 Built for the PayPal AI Hackathon (November 2026). It runs on PayPal's sandbox: no real money moves, and the stores and people are fictional.
 
-**Try it:** [shopper](https://tokento-shopper.vercel.app) · [store dashboard](https://tokento-dashboard.vercel.app) · demo video: linked from the Devpost submission
+**Try it:** [shopper](https://tokento-shopper.vercel.app) · [store dashboard](https://tokento-dashboard.vercel.app) · [demo video](https://youtu.be/YzSreGnb_LI)
 
 ![The shopping agent prices three stores with the shopper's rewards, picks the best total value and pays with PayPal](docs/images/shopper-agent-checkout.jpg)
 
@@ -191,7 +191,7 @@ The wallet behind it is a working loyalty API with a three-endpoint query interf
 
 ## Presentation
 
-- **Demo video** (under 3 minutes): linked from the Devpost submission.
+- **Demo video:** [watch on YouTube](https://youtu.be/YzSreGnb_LI).
 - **Hosted demo**: [shopper](https://tokento-shopper.vercel.app) and [store dashboard](https://tokento-dashboard.vercel.app); every visitor gets a fresh shopper.
 - **This README**: a five-minute walkthrough, two diagrams, screenshots, and a link to the code behind each PayPal feature.
 
