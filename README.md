@@ -327,28 +327,33 @@ Agent checkout adds its own routes for checkout, webhooks, limits and settlement
 
 ### Use it from Claude Desktop
 
-Claude Desktop runs local MCP servers over stdin/stdout, and the adapter is an HTTP Worker, so [`bridge/claude-desktop.mjs`](packages/mcp-adapter/bridge/claude-desktop.mjs) sits between them (plain Node, no dependencies).
+Optional, about 10 minutes. Claude Desktop runs local MCP servers over stdin/stdout, and the adapter is an HTTP Worker, so [`bridge/claude-desktop.mjs`](packages/mcp-adapter/bridge/claude-desktop.mjs) sits between them (plain Node, no dependencies). This path uses the hosted API, so you only need Node 20+, pnpm 9 and Claude Desktop: no Docker, PayPal keys or Azure.
 
-1. Start the Worker against the hosted API: `pnpm --filter @tokento/mcp-adapter dev:hosted` (port 8787).
-2. Get a demo shopper's wallet token: `curl -X POST https://tokento-api.wittybush-ac01d507.centralus.azurecontainerapps.io/api/v1/demo/shoppers` (the `token` field; it lasts 7 days).
-3. Add this to `~/Library/Application Support/Claude/claude_desktop_config.json` (Windows: `%APPDATA%\Claude\claude_desktop_config.json`), then quit and reopen Claude Desktop:
+1. Clone the repo and install: `git clone https://github.com/aryan3002/tokento-agent-checkout.git && cd tokento-agent-checkout && pnpm install`.
+2. Start the Worker against the hosted API and leave it running: `pnpm --filter @tokento/mcp-adapter dev:hosted` (port 8787; no Cloudflare login needed).
+3. Get a demo shopper's wallet token: `curl -X POST https://tokento-api.wittybush-ac01d507.centralus.azurecontainerapps.io/api/v1/demo/shoppers` (the `token` field; it lasts 7 days). The shopper starts with a $5 Coffee Co. reward and a $3 Ridgeline reward.
+4. Find the full path to Node with `which node`. Claude Desktop often can't find Node on its own, so use that path as `command`.
+5. Quit Claude Desktop (Cmd+Q), add this to `~/Library/Application Support/Claude/claude_desktop_config.json` (Windows: `%APPDATA%\Claude\claude_desktop_config.json`; create the file if it doesn't exist, or add `tokento` to its existing `mcpServers`), then open Claude again:
 
 ```json
 {
   "mcpServers": {
     "tokento": {
-      "command": "node",
-      "args": ["/absolute/path/to/packages/mcp-adapter/bridge/claude-desktop.mjs"],
+      "command": "/full/path/from/which/node",
+      "args": ["/full/path/to/tokento-agent-checkout/packages/mcp-adapter/bridge/claude-desktop.mjs"],
       "env": {
         "TOKENTO_MCP_URL": "http://127.0.0.1:8787",
-        "TOKENTO_WALLET_TOKEN": "<the token from step 2>"
+        "TOKENTO_WALLET_TOKEN": "<the token from step 3>"
       }
     }
   }
 }
 ```
 
-4. Ask Claude something like "Reorder my usual coffee beans with the best total value, using my rewards." It calls `search_products`, `compare_offers` and `start_checkout`, and gives you a PayPal sandbox link to approve. The order shows up on the store dashboard like any other.
+6. In a new chat, check that **tokento** is listed in the tools menu, then ask: "Use Tokento to buy one 2 lb bag of medium roast whole bean coffee with the best total value, using my rewards." Claude calls `search_products`, `compare_offers` and `start_checkout`, recommends Coffee Co. at $23.00 with $5 back, and gives you a PayPal sandbox link. Naming Tokento keeps Claude from looking for past orders in other connected tools.
+7. Approve the payment with the sandbox buyer from the Devpost testing instructions (or your own sandbox personal account), then ask "Is it paid?". The order also appears on the [store dashboard](https://tokento-dashboard.vercel.app) under Agent orders.
+
+If Claude says the Tokento server isn't reachable, the Worker from step 2 has stopped; start it again. Each demo shopper's $5 reward can be spent once; for another run, get a new token (step 3) and restart Claude.
 
 With `TOKENTO_WALLET_TOKEN` set, the bridge sends the token on every call and hides the `wallet_token` argument from the model, so the token never appears in the chat and the model can't substitute another shopper's.
 
