@@ -277,6 +277,24 @@ abf66be feat(mandates): spending limits the agent must stay inside
 abf84e6 build(api): image runs as the unprivileged node user
 95baa5f chore: deploy the shopper and dashboard to Vercel from the repo root
 03991d4 fix(dashboard): Total Value adds token amounts as money
+c6b54ce docs: README for judges: try-it walkthrough, PayPal feature map, honest limits
+06b45af feat(dashboard): Vercel-style redesign that anyone can follow
+06aa6f4 docs: README shows the redesigned dashboard; wider PayPal column
+3145c99 feat(shopper): same Geist look as the dashboard, easier to follow
+113879d docs: README hero shows the restyled shopper
+98744d5 feat: show stores why shopping agents pick them
+1e8c034 feat: a paid order opens the store's view of the same order
+86ffc11 feat(agent): evals of the real agent, and catalog search that agents can rely on
+5379cf8 feat: one spend guard for the hosted agent, shared by every server instance
+e11ef74 fix: two edge cases a judge could hit
+54affd0 fix: the shopper fits a phone, and offer text has one period after "Coffee Co."
+7bb8034 feat(dashboard): Agent comparisons grid, and search, CSV and saved layouts on every grid
+9361c1b feat(mcp): any MCP agent can compare stores and start a PayPal checkout
+471b1f7 docs: README covers today's work and corrects two honest limits
+dec4f21 docs(demo-video): Remotion project, live footage and audio for the demo film
+ed2c282 fix(api): answer malformed or oversized JSON bodies with 4xx, not 500
+046afee chore: keep demo video files out of the API image build context
+f5642cb feat(mcp): Claude Desktop bridge for the MCP adapter
 ```
 
 Later commits (this README onward) are in `git log`.
@@ -292,7 +310,6 @@ Later commits (this README onward) are in `git log`.
 - **Agent comparisons count every quote of two or more stores,** including a second quote in the same conversation.
 - **Rewards are per store.** Spending one store's reward at another store is on the roadmap, not built.
 - **Payouts run when the store clicks Settle now.** There is no scheduled settlement in the demo.
-- **Refunds** are covered by integration tests; the live sandbox runs so far covered purchases, Link PayPal once and Payouts.
 - **The MCP adapter isn't hosted.** You run the Worker on your machine (it calls the hosted API), and Claude Desktop reaches it through a small stdio bridge; see [Use it from Claude Desktop](#use-it-from-claude-desktop).
 - **Carried over from the platform:** one API replica, Redis as a cache only, no transactional outbox for outgoing store webhooks, no HMAC key rotation, and rate limits as the only fraud control.
 

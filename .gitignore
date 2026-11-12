@@ -34,3 +34,6 @@ Thumbs.db
 
 # Vercel CLI link folder
 .vercel
+
+# Demo video sources and renders stay on the author's machine, never in git
+docs/demo-video/
