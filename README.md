@@ -235,66 +235,66 @@ pnpm --filter @tokento/paypal smoke webhook-register https://<your-tunnel>/api/v
 
 ## Built during the hackathon
 
-Everything after commit `66c96b1` was built during the hackathon. List it with `git log --reverse --oneline 66c96b1..HEAD`.
+Everything after commit `b1bb085` was built during the hackathon. List it with `git log --reverse --oneline b1bb085..HEAD`.
 
-**Already there at `66c96b1`:** Tokento's loyalty API (HMAC-signed rewards, the platform wallet, the three-endpoint Token Query Interface, merchant configuration, outgoing webhooks, expiry sweeper), the MCP adapter, the store dashboard's original tabs and the checkout widget.
+**Already there at `b1bb085`:** Tokento's loyalty API (HMAC-signed rewards, the platform wallet, the three-endpoint Token Query Interface, merchant configuration, outgoing webhooks, expiry sweeper), the MCP adapter, the store dashboard's original tabs and the checkout widget.
 
 **Built during the hackathon:** the PayPal client package, agent checkout (pricing, quotes, holds, capture and finalize, verified webhooks, refunds, the sweeper), spending limits with PayPal Vault, Payouts settlement, the shopper app and its agent, agent evals, the dashboard's Agent Orders, Agent Comparisons, PayPal webhook feed and Payouts pages, the shared spend guard, the MCP checkout tools, and the hosted demo.
 
 <details>
-<summary>Commits after 66c96b1, oldest first</summary>
+<summary>Commits after b1bb085, oldest first</summary>
 
 ```
-3ba5458 chore: env placeholders for PayPal and the shopper agent
-8951aaa feat(paypal): PayPal REST client package
-5cab9f9 chore(paypal): sandbox smoke script
-8104f41 feat(api): schema and demo data for agent checkout
-1d31e1d feat(checkout): Decimal pricing engine for agent offers
-42d3fb6 feat(checkout): quote and create agent checkouts on PayPal
-71880a3 feat(checkout): capture and finalize agent payments
-2dd37c0 feat(checkout): verified PayPal webhooks
-e949164 feat(checkout): refunds give spent rewards back
-a578796 feat(checkout): shopper checkout API, catalog search and sweeper
-9a68dea feat(shopper): Next.js shopper app scaffold and demo session
-3b7f458 wip(shopper): agent tools, prompt and events (loop.ts pending)
-29cf293 feat(shopper): Claude agent loop with strict tools and PayPal checkout
-c9aad94 feat(shopper): streaming chat route and store directory
-fca5769 feat(shopper): NDJSON reader and chat transcript state
-00ac646 wip(shopper): chat UI pieces (offers table, checkout card, wallet panel, routes)
-57c0fe7 feat(shopper): chat screen with PayPal checkout and wallet
-aee610c feat(dashboard): live agent orders in AG Grid with PayPal webhook feed
-a55b06e feat(shopper): run the shopping agent on Azure OpenAI
-2d5878a feat(shopper): spending guardrails for the agent
-888531d fix(shopper): progress lines show the reasoning summary's title
-3141fcc fix(dashboard): load once the dev session arrives; keep status and refund in view
-9f13dcf fix(shopper): agent compares the same item at every store
-62980e0 chore(api): webhook-only relay for testing PayPal webhooks locally
-abf66be feat(mandates): spending limits the agent must stay inside
-72f9060 feat(mandates): approve once, then the agent pays inside the limits
-2117985 feat(settlement): pay stores through PayPal Payouts
-88b6b3d feat(demo): a fresh shopper per hosted-demo visitor
-9c4a4d2 fix(api): never hand out dev sessions in production
-abf84e6 build(api): image runs as the unprivileged node user
-95baa5f chore: deploy the shopper and dashboard to Vercel from the repo root
-03991d4 fix(dashboard): Total Value adds token amounts as money
-c6b54ce docs: README for judges: try-it walkthrough, PayPal feature map, honest limits
-06b45af feat(dashboard): Vercel-style redesign that anyone can follow
-06aa6f4 docs: README shows the redesigned dashboard; wider PayPal column
-3145c99 feat(shopper): same Geist look as the dashboard, easier to follow
-113879d docs: README hero shows the restyled shopper
-98744d5 feat: show stores why shopping agents pick them
-1e8c034 feat: a paid order opens the store's view of the same order
-86ffc11 feat(agent): evals of the real agent, and catalog search that agents can rely on
-5379cf8 feat: one spend guard for the hosted agent, shared by every server instance
-e11ef74 fix: two edge cases a judge could hit
-54affd0 fix: the shopper fits a phone, and offer text has one period after "Coffee Co."
-7bb8034 feat(dashboard): Agent comparisons grid, and search, CSV and saved layouts on every grid
-9361c1b feat(mcp): any MCP agent can compare stores and start a PayPal checkout
-471b1f7 docs: README covers today's work and corrects two honest limits
-dec4f21 docs(demo-video): Remotion project, live footage and audio for the demo film
-ed2c282 fix(api): answer malformed or oversized JSON bodies with 4xx, not 500
-046afee chore: keep demo video files out of the API image build context
-f5642cb feat(mcp): Claude Desktop bridge for the MCP adapter
+73fe28f chore: env placeholders for PayPal and the shopper agent
+88d47de feat(paypal): PayPal REST client package
+89326f0 chore(paypal): sandbox smoke script
+46b8910 feat(api): schema and demo data for agent checkout
+ceff1f8 feat(checkout): Decimal pricing engine for agent offers
+c2c4104 feat(checkout): quote and create agent checkouts on PayPal
+3cf4874 feat(checkout): capture and finalize agent payments
+a04a2a7 feat(checkout): verified PayPal webhooks
+cba3887 feat(checkout): refunds give spent rewards back
+fb912f2 feat(checkout): shopper checkout API, catalog search and sweeper
+f5bce64 feat(shopper): Next.js shopper app scaffold and demo session
+9e10f24 wip(shopper): agent tools, prompt and events (loop.ts pending)
+ba6bf5b feat(shopper): Claude agent loop with strict tools and PayPal checkout
+abb9987 feat(shopper): streaming chat route and store directory
+ced54fd feat(shopper): NDJSON reader and chat transcript state
+05c7364 wip(shopper): chat UI pieces (offers table, checkout card, wallet panel, routes)
+a3abb07 feat(shopper): chat screen with PayPal checkout and wallet
+aa14444 feat(dashboard): live agent orders in AG Grid with PayPal webhook feed
+0bcece7 feat(shopper): run the shopping agent on Azure OpenAI
+04885f3 feat(shopper): spending guardrails for the agent
+d68e2fd fix(shopper): progress lines show the reasoning summary's title
+a630fb4 fix(dashboard): load once the dev session arrives; keep status and refund in view
+d7386f0 fix(shopper): agent compares the same item at every store
+673f54f chore(api): webhook-only relay for testing PayPal webhooks locally
+6d2d0c7 feat(mandates): spending limits the agent must stay inside
+d8b2327 feat(mandates): approve once, then the agent pays inside the limits
+0b5e389 feat(settlement): pay stores through PayPal Payouts
+67cbed8 feat(demo): a fresh shopper per hosted-demo visitor
+222a543 fix(api): never hand out dev sessions in production
+f406a3b build(api): image runs as the unprivileged node user
+269a9a6 chore: deploy the shopper and dashboard to Vercel from the repo root
+ddc49ee fix(dashboard): Total Value adds token amounts as money
+68f2d63 docs: README for judges: try-it walkthrough, PayPal feature map, honest limits
+7d48e54 feat(dashboard): Vercel-style redesign that anyone can follow
+20bbd84 docs: README shows the redesigned dashboard; wider PayPal column
+623a04b feat(shopper): same Geist look as the dashboard, easier to follow
+081df3a docs: README hero shows the restyled shopper
+169be70 feat: show stores why shopping agents pick them
+2a0b63e feat: a paid order opens the store's view of the same order
+ff62db1 feat(agent): evals of the real agent, and catalog search that agents can rely on
+33def85 feat: one spend guard for the hosted agent, shared by every server instance
+df9bf3e fix: two edge cases a judge could hit
+cc88992 fix: the shopper fits a phone, and offer text has one period after "Coffee Co."
+01e18f6 feat(dashboard): Agent comparisons grid, and search, CSV and saved layouts on every grid
+2c51404 feat(mcp): any MCP agent can compare stores and start a PayPal checkout
+7a1b64a docs: README covers today's work and corrects two honest limits
+4fb23a3 chore: keep media assets out of app deploys
+39cbccb fix(api): answer malformed or oversized JSON bodies with 4xx, not 500
+8322472 chore: keep demo video files out of the API image build context
+85a743e feat(mcp): Claude Desktop bridge for the MCP adapter
 ```
 
 Later commits (this README onward) are in `git log`.
