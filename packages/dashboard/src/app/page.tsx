@@ -646,7 +646,7 @@ export default function Dashboard() {
                       onGoToDemo={() => selectPage("connect")}
                     />
                   )}
-                  <DemoTab merchant={merchant} />
+                  <DemoTab />
                 </div>
               )}
               {tab === "webhooks" && (
@@ -1214,17 +1214,20 @@ function SettingsTab({
   return (
     <div className="space-y-6 stagger-children max-w-2xl">
       <div className="glass rounded-xl p-5">
-        <h3 className="font-semibold mb-4">Stytch B2B Login</h3>
-        <p className="text-xs text-text-muted mb-3">
-          Dashboard calls use <code className="bg-surface-3 px-1 rounded">Authorization: Bearer &lt;session_jwt&gt;</code>. API keys remain supported for server-to-server calls.
+        <h3 className="font-semibold mb-4">Sign-in</h3>
+        <p className="text-sm flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-success" />
+          {b2bSessionJwt ? `Signed in to ${merchant.name} with a store session` : `Signed in as ${merchant.name}, a sandbox demo store`}
         </p>
-        <div className="space-y-3">
-          <div className="text-xs">
-            Status:{" "}
-            <span className={b2bSessionJwt ? "text-success" : "text-warning"}>
-              {b2bSessionJwt ? "Session active" : "No session loaded"}
-            </span>
-          </div>
+        <p className="text-xs text-text-muted mt-2">
+          The demo opens without an account so you can look around. Its requests use the store&apos;s API key, which stays on
+          the server. A real store signs in with a Stytch B2B magic link, and the API takes that session as{" "}
+          <code className="bg-surface-3 px-1 rounded">Authorization: Bearer &lt;session_jwt&gt;</code>.
+        </p>
+        {authWarning && <p className="text-xs text-warning mt-2">{authWarning}</p>}
+        <details className="mt-4">
+          <summary className="text-xs font-medium text-text-secondary cursor-pointer select-none">Sign in with Stytch instead</summary>
+        <div className="space-y-3 mt-3">
           <div className="flex gap-2">
             <input
               value={loginEmail}
@@ -1265,21 +1268,19 @@ function SettingsTab({
               Clear session
             </button>
           </div>
-          {authWarning && <p className="text-xs text-warning">{authWarning}</p>}
         </div>
+        </details>
       </div>
 
       <div className="glass rounded-xl p-5">
         <h3 className="font-semibold mb-4">API Key</h3>
         <div className="rounded-lg bg-surface-3 px-4 py-3 text-sm">
-          The merchant API key is held server-side and is never sent to the browser.
-          Read it from your own environment when you need it for server-to-server calls.
+          The store&apos;s API key stays on the server and is never sent to the browser.
         </div>
         <p className="text-xs text-text-muted mt-2">
-          Use this key in the <code className="bg-surface-3 px-1 rounded">X-API-Key</code> header. Loaded from{" "}
-          <code className="bg-surface-3 px-1 rounded">TOKENTO_API_KEY</code> (server-side only,
-          never exposed to the browser); seeded via{" "}
-          <code className="bg-surface-3 px-1 rounded">DEV_FIXED_API_KEY</code>.
+          Server-to-server calls, like issuing a reward after a sale, send it in the{" "}
+          <code className="bg-surface-3 px-1 rounded">X-API-Key</code> header. This dashboard reads it from{" "}
+          <code className="bg-surface-3 px-1 rounded">TOKENTO_API_KEY</code> on its server.
         </p>
       </div>
 
@@ -1330,50 +1331,62 @@ function SettingsTab({
   );
 }
 
-/* ---- Demo Wiring ---- */
-function DemoTab({ merchant }: { merchant: Merchant | null }) {
+/* ---- Connect an agent ---- */
+// The hosted demo's public API and the repo, used in the copy-paste steps below.
+const PUBLIC_API_URL =
+  process.env.NEXT_PUBLIC_TOKENTO_PUBLIC_API_URL || "https://tokento-api.wittybush-ac01d507.centralus.azurecontainerapps.io";
+const REPO_URL = "https://github.com/aryan3002/tokento-agent-checkout";
+
+function DemoTab() {
   const docsUrl = `${API_BASE}/docs`;
   const openApiSpecUrl = `${API_BASE}/docs/openapi.yaml`;
+  const startServer = `git clone ${REPO_URL}.git
+cd tokento-agent-checkout && pnpm install
+pnpm --filter @tokento/mcp-adapter dev:hosted`;
+  const getShopper = `curl -X POST ${PUBLIC_API_URL}/api/v1/demo/shoppers`;
   const claudeConfig = useMemo(() => JSON.stringify({
     mcpServers: {
       tokento: {
-        command: "node",
-        args: ["<absolute-path-to>/packages/mcp-adapter/bridge/claude-desktop.mjs"],
+        command: "/full/path/from/which/node",
+        args: ["/full/path/to/tokento-agent-checkout/packages/mcp-adapter/bridge/claude-desktop.mjs"],
         env: {
           TOKENTO_MCP_URL: "http://127.0.0.1:8787",
-          TOKENTO_WALLET_TOKEN: "<the shopper's wallet_token>",
+          TOKENTO_WALLET_TOKEN: "<the token from step 2>",
         },
       },
     },
   }, null, 2), []);
 
-  const curlMint = `curl -X POST http://localhost:4000/api/v1/tokens/mint \\
-  -H "X-API-Key: $TOKENTO_API_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "merchantId": "${merchant?.id || "<merchant-id>"}",
-    "customerId": "11111111-1111-4111-8111-111111111111",
-    "transactionAmount": 30,
-    "earnRuleId": "<earn-rule-id>",
-    "idempotencyKey": "demo-mint-1"
-  }'`;
+  const code = "bg-surface-3 px-1 rounded";
+  const block = "bg-surface-3 rounded-lg p-4 text-xs font-mono text-text-secondary overflow-x-auto whitespace-pre";
 
   return (
     <div className="space-y-6 max-w-3xl">
       <div className="glass rounded-xl p-5">
-        <h3 className="font-semibold mb-2">1 — Confirm the API + MCP are running</h3>
+        <h3 className="font-semibold mb-2">Any MCP agent can shop here</h3>
         <p className="text-sm text-text-secondary mb-3">
-          API: <code className="bg-surface-3 px-1 rounded">http://localhost:4000/health</code> · MCP Worker:{" "}
-          <code className="bg-surface-3 px-1 rounded">http://localhost:8787</code> · Postgres :5434 · Redis :6379
+          Tokento&apos;s checkout is also an MCP server, so an outside agent buys the way the shopper app does, with the same
+          server-side prices and spending limits: <code className={code}>search_products</code>,{" "}
+          <code className={code}>compare_offers</code>, <code className={code}>start_checkout</code> and{" "}
+          <code className={code}>get_order_status</code>. These steps connect Claude Desktop to this hosted demo in about
+          10 minutes. You need Node 20+, pnpm 9 and Claude Desktop; no Docker, PayPal keys or Azure.
         </p>
-        <div className="flex flex-wrap items-center gap-2 mb-3">
+        <div className="flex flex-wrap items-center gap-2">
           <a
-            href={docsUrl}
+            href={`${REPO_URL}#use-it-from-claude-desktop`}
             target="_blank"
             rel="noreferrer"
             className="px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium transition-colors"
           >
-            Open API Docs
+            Full steps in the README
+          </a>
+          <a
+            href={docsUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="px-3 py-1.5 rounded-lg bg-surface-3 hover:bg-surface-4 text-xs font-medium transition-colors"
+          >
+            API docs
           </a>
           <a
             href={openApiSpecUrl}
@@ -1384,49 +1397,62 @@ function DemoTab({ merchant }: { merchant: Merchant | null }) {
             OpenAPI YAML
           </a>
         </div>
-        <p className="text-xs text-text-muted">
-          See the System Status tab for one-click health checks.
-        </p>
       </div>
 
       <div className="glass rounded-xl p-5">
-        <h3 className="font-semibold mb-2">2 — Wire Claude Desktop to the MCP bridge</h3>
-        <p className="text-sm text-text-secondary mb-3">
-          Add this to <code className="bg-surface-3 px-1 rounded">~/Library/Application Support/Claude/claude_desktop_config.json</code> and
-          restart Claude Desktop:
-        </p>
-        <pre className="bg-surface-3 rounded-lg p-4 text-xs font-mono text-text-secondary overflow-x-auto">
-{claudeConfig}
-        </pre>
+        <h3 className="font-semibold mb-2">1 — Start the MCP server</h3>
+        <pre className={block}>{startServer}</pre>
         <p className="text-xs text-text-muted mt-3">
-          The bridge connects Claude&apos;s stdio to the Cloudflare Worker (<code className="bg-surface-3 px-1 rounded">pnpm --filter @tokento/mcp-adapter dev:hosted</code> runs it against the hosted API). With <code className="bg-surface-3 px-1 rounded">TOKENTO_WALLET_TOKEN</code> set, the token stays out of the chat.
+          It listens on <code className={code}>127.0.0.1:8787</code> and calls the hosted Tokento API. No Cloudflare login
+          needed. Leave it running.
         </p>
       </div>
 
       <div className="glass rounded-xl p-5">
-        <h3 className="font-semibold mb-2">3 — Let the agent shop</h3>
+        <h3 className="font-semibold mb-2">2 — Get a demo shopper</h3>
+        <pre className={block}>{getShopper}</pre>
+        <p className="text-xs text-text-muted mt-3">
+          Copy the <code className={code}>token</code> field from the reply; it lasts 7 days. The shopper starts with a $5
+          Coffee Co. reward and a $3 Ridgeline Roasters reward.
+        </p>
+      </div>
+
+      <div className="glass rounded-xl p-5">
+        <h3 className="font-semibold mb-2">3 — Add Tokento to Claude Desktop</h3>
+        <p className="text-sm text-text-secondary mb-3">
+          Quit Claude Desktop (Cmd+Q), add this to{" "}
+          <code className={code}>~/Library/Application Support/Claude/claude_desktop_config.json</code>, then open Claude
+          again. Use the full path from <code className={code}>which node</code> as the command; Claude Desktop often
+          can&apos;t find Node on its own.
+        </p>
+        <pre className={block}>{claudeConfig}</pre>
+        <p className="text-xs text-text-muted mt-3">
+          The bridge sends the token on every tool call and hides it from the model, so it never appears in the chat and
+          the model can&apos;t swap in another shopper.
+        </p>
+      </div>
+
+      <div className="glass rounded-xl p-5">
+        <h3 className="font-semibold mb-2">4 — Ask Claude to buy</h3>
         <ol className="text-sm text-text-secondary space-y-2 list-decimal list-inside">
           <li>
-            Get a shopper session for the agent. Locally: <code className="bg-surface-3 px-1 rounded">b2c_dev_session::11111111-1111-4111-8111-111111111111</code> (Maya).
-            On the hosted demo: <code className="bg-surface-3 px-1 rounded">curl -X POST $TOKENTO_API_URL/api/v1/demo/shoppers</code> returns a fresh shopper&apos;s token.
-            Tools take it as <code className="bg-surface-3 px-1 rounded">wallet_token</code>; identity never comes from an id argument.
+            In a new chat, ask: <em>&quot;Use Tokento to buy one 2 lb bag of medium roast whole bean coffee with the best
+            total value, using my rewards.&quot;</em>
           </li>
-          <li>Ask Claude Desktop: <em>&quot;My Tokento wallet token is &lt;token&gt;. Reorder my coffee beans, under $30.&quot;</em></li>
           <li>
-            Claude calls <code className="bg-surface-3 px-1 rounded">search_products</code>, <code className="bg-surface-3 px-1 rounded">compare_offers</code> (Tokento prices every store with the shopper&apos;s rewards) and{" "}
-            <code className="bg-surface-3 px-1 rounded">start_checkout</code>, then gives you the PayPal link to approve. <code className="bg-surface-3 px-1 rounded">get_order_status</code> confirms it was paid.
+            Claude calls <code className={code}>search_products</code> and <code className={code}>compare_offers</code>{" "}
+            (Tokento prices every store with the shopper&apos;s rewards), recommends Coffee Co. at $23.00 with $5 back, and{" "}
+            <code className={code}>start_checkout</code> gives you a PayPal sandbox link.
           </li>
-          <li>Watch this dashboard: the comparison lands in Agent comparisons and the order in Agent orders, live over SSE. Outside the shopper&apos;s spending limits, Tokento refuses the checkout until the shopper agrees.</li>
+          <li>
+            Approve it with the sandbox buyer from the Devpost testing instructions, then ask &quot;Is it paid?&quot;{" "}
+            (<code className={code}>get_order_status</code>).
+          </li>
+          <li>The comparison and the order show up here in Agent comparisons and Agent orders, live.</li>
         </ol>
-      </div>
-
-      <div className="glass rounded-xl p-5">
-        <h3 className="font-semibold mb-2">4 — Or mint a token from the CLI</h3>
-        <pre className="bg-surface-3 rounded-lg p-4 text-xs font-mono text-text-secondary overflow-x-auto whitespace-pre">
-{curlMint}
-        </pre>
         <p className="text-xs text-text-muted mt-3">
-          The dashboard will receive a <code className="bg-surface-3 px-1 rounded">token.minted</code> event over SSE and update without a refresh.
+          Each demo shopper&apos;s $5 Coffee Co. reward can be spent once. For another run, get a new token (step 2) and
+          restart Claude. To run the whole stack on your own machine instead, see the README.
         </p>
       </div>
     </div>
